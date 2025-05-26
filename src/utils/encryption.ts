@@ -11,8 +11,13 @@ const generateIV = (): string => {
 /**
  * Derives a key from the master password
  */
-const deriveKey = (password: string, salt: string): forge.util.ByteStringBuffer => {
-  return forge.pkcs5.pbkdf2(password, salt, iterations: 10000, 32);
+const deriveKey = (password: string, salt: string): string => {
+  // Convert password to UTF-8 bytes
+  const passwordBuffer = forge.util.createBuffer(forge.util.encodeUtf8(password));
+  // Convert salt to buffer
+  const saltBuffer = forge.util.createBuffer(salt);
+  
+  return forge.pkcs5.pbkdf2(passwordBuffer.getBytes(), saltBuffer.getBytes(), 10000, 32);
 };
 
 /**

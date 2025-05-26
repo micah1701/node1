@@ -17,6 +17,19 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `;
 
+const createKeyValuesTable = `
+CREATE TABLE IF NOT EXISTS key_values (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  uuid VARCHAR(36) NOT NULL UNIQUE,
+  key_name VARCHAR(255) NOT NULL,
+  encrypted_value TEXT NOT NULL,
+  retrieved INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_uuid (uuid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
 async function setupDatabase() {
   try {
     const connection = await mysql.createConnection({
@@ -31,6 +44,10 @@ async function setupDatabase() {
     // Create users table
     await connection.execute(createUsersTable);
     logger.info('Users table created successfully');
+
+    // Create key_values table
+    await connection.execute(createKeyValuesTable);
+    logger.info('Key-values table created successfully');
 
     await connection.end();
     logger.info('Database setup completed');

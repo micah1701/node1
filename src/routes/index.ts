@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import keyValueRoutes from './keyValue.routes';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ router.get('/health', (req, res) => {
 
 // Routes
 router.use('/auth', authRoutes);
+router.use('/key-values', keyValueRoutes);
 
 // Handle 404 - API endpoint not found
 router.use('*', (req, res) => {
