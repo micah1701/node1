@@ -8,7 +8,8 @@
     "dev": "ts-node src/index.ts",
     "build": "tsc",
     "lint": "eslint src/**/*.ts",
-    "test": "jest"
+    "test": "jest",
+    "db:setup": "ts-node src/scripts/setupDatabase.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,6 +20,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "mysql2": "^3.6.5",
     "winston": "^3.11.0"
   },
   "devDependencies": {

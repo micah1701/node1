@@ -4,9 +4,7 @@ import { ApiError } from '../middlewares/error.middleware';
 import { HttpStatus, LoginRequest, RegisterRequest, ApiResponse, TokenResponse } from '../types';
 import { generateToken, generateRefreshToken } from '../utils/jwt.utils';
 import { logger } from '../utils/logger';
-
-// In-memory user store (replace with database in production)
-const users: any[] = [];
+import { pool } from '../utils/db';
 
 /**
  * Register a new user
@@ -15,44 +13,41 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
   try {
     const { email, password, name } = req.body as RegisterRequest;
     
-    // Check if user already exists
-    const userExists = users.find(user => user.email === email);
-    if (userExists) {
-      throw new ApiError(HttpStatus.BAD_REQUEST, 'User already exists');
-    }
-    
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
     // Create user
-    const newUser = {
-      id: Date.now().toString(),
-      email,
-      password: hashedPassword,
-      name,
-      role: 'user',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const [result] = await pool.execute(
+      'INSERT INTO users (api_user, api_secret, full_name, email) VALUES (?, ?, ?, ?)',
+      [email, hashedPassword, name, email]
+    );
     
-    // Save user
-    users.push(newUser);
+    const insertResult = result as { insertId: number };
     
     logger.info(`User registered: ${email}`);
     
-    // Create response without password
-    const { password: _, ...userWithoutPassword } = newUser;
+    // Get the created user
+    const [users] = await pool.execute(
+      'SELECT id, api_user, full_name, email, created_at FROM users WHERE id = ?',
+      [insertResult.insertId]
+    ) as [any[], any];
     
-    const response: ApiResponse<typeof userWithoutPassword> = {
+    const user = users[0];
+    
+    const response: ApiResponse<typeof user> = {
       success: true,
-      data: userWithoutPassword,
+      data: user,
       message: 'User registered successfully'
     };
     
     res.status(HttpStatus.CREATED).json(response);
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      next(new ApiError(HttpStatus.BAD_REQUEST, 'User already exists'));
+    } else {
+      next(error);
+    }
   }
 };
 
@@ -64,19 +59,30 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const { email, password } = req.body as LoginRequest;
     
     // Find user
-    const user = users.find(user => user.email === email);
+    const [users] = await pool.execute(
+      'SELECT * FROM users WHERE api_user = ?',
+      [email]
+    ) as [any[], any];
+    
+    const user = users[0];
     if (!user) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'Invalid credentials');
     }
     
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.api_secret);
     if (!isPasswordValid) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'Invalid credentials');
     }
     
+    // Increment total_logins
+    await pool.execute(
+      'UPDATE users SET total_logins = total_logins + 1 WHERE id = ?',
+      [user.id]
+    );
+    
     // Generate tokens
-    const payload = { id: user.id, email: user.email, role: user.role };
+    const payload = { id: user.id.toString(), email: user.email, role: 'user' };
     const accessToken = generateToken(payload);
     const refreshToken = generateRefreshToken(payload);
     
@@ -97,25 +103,26 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 /**
  * Get current user profile
  */
-export const getProfile = (req: Request, res: Response, next: NextFunction) => {
+export const getProfile = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // User is attached to request by auth middleware
     if (!req.user) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'Not authenticated');
     }
     
     // Find user by id
-    const user = users.find(user => user.id === req.user?.id);
+    const [users] = await pool.execute(
+      'SELECT id, api_user, full_name, email, total_logins, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    ) as [any[], any];
+    
+    const user = users[0];
     if (!user) {
       throw new ApiError(HttpStatus.NOT_FOUND, 'User not found');
     }
     
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
-    
-    const response: ApiResponse<typeof userWithoutPassword> = {
+    const response: ApiResponse<typeof user> = {
       success: true,
-      data: userWithoutPassword
+      data: user
     };
     
     res.status(HttpStatus.OK).json(response);
@@ -129,12 +136,10 @@ export const getProfile = (req: Request, res: Response, next: NextFunction) => {
  */
 export const refreshToken = (req: Request, res: Response, next: NextFunction) => {
   try {
-    // User is attached to request by auth middleware
     if (!req.user) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'Not authenticated');
     }
     
-    // Generate new access token
     const payload = { 
       id: req.user.id, 
       email: req.user.email, 
