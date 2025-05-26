@@ -8,6 +8,10 @@ if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable must be defined');
 }
 
+if (!process.env.MASTER_ENCRYPTION_KEY) {
+  throw new Error('MASTER_ENCRYPTION_KEY environment variable must be defined');
+}
+
 type JwtExpiration = SignOptions['expiresIn'];
 
 export const config = {
@@ -18,6 +22,10 @@ export const config = {
     secret: process.env.JWT_SECRET,
     expiresIn: (process.env.JWT_EXPIRATION || '1h') as JwtExpiration,
     refreshExpiresIn: (process.env.JWT_REFRESH_EXPIRATION || '7d') as JwtExpiration
+  },
+  
+  encryption: {
+    masterKey: process.env.MASTER_ENCRYPTION_KEY
   },
   
   logging: {
