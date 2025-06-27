@@ -6,6 +6,7 @@ import { config } from './config';
 import { errorHandler } from './middlewares/error.middleware';
 import routes from './routes';
 import { logger } from './utils/logger';
+import { testDatabaseConnection, isDatabaseConnected } from './utils/db';
 
 // Initialize express app
 const app = express();
@@ -17,6 +18,17 @@ app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(morgan('dev')); // Request logging
 
+// Health check endpoint (should work without database)
+app.get('/api/health', (req, res) => {
+  const dbStatus = isDatabaseConnected();
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    database: dbStatus ? 'connected' : 'disconnected',
+    environment: config.environment
+  });
+});
+
 // Apply routes
 app.use('/api', routes);
 
@@ -24,8 +36,11 @@ app.use('/api', routes);
 app.use(errorHandler);
 
 // Start server
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, async () => {
   logger.info(`Server running on port ${config.port} in ${config.environment} mode`);
+  
+  // Test database connection after server starts (non-blocking)
+  await testDatabaseConnection();
 });
 
 process.on('SIGTERM', () => {
