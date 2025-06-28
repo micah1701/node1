@@ -13,7 +13,6 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  acquireTimeout: 5000, // 5 second timeout
   timeout: 5000 // 5 second query timeout
 });
 
