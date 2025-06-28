@@ -12,8 +12,7 @@ export const pool = mysql.createPool({
   database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  timeout: 5000 // 5 second query timeout
+  queueLimit: 0
 });
 
 // Track database connection status
