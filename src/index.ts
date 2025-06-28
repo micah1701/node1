@@ -12,7 +12,14 @@ import { testDatabaseConnection, isDatabaseConnected } from './utils/db';
 const app = express();
 
 // Apply middlewares
-app.use(helmet()); // Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "script-src": ["'self'", "'unsafe-eval'"],
+    },
+  },
+})); // Security headers with CSP configuration
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
@@ -168,7 +175,7 @@ app.get('/', (req, res) => {
             <li>Use <code>/api/health</code> to check server status</li>
             <li>Register a user with <code>/api/auth/register</code></li>
             <li>Login to get access tokens with <code>/api/auth/login</code></li>
-            <li>Include <code>Authorization: Bearer &lt;token&gt;</code> header for protected routes</li>
+            <li>Include <code>Authorization: Bearer <token></code> header for protected routes</li>
           </ul>
         </div>
         
