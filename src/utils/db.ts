@@ -76,6 +76,7 @@ class MySQLAdapter implements DatabaseAdapter {
 class SupabaseAdapter implements DatabaseAdapter {
   private client: any;
   private connected: boolean = false;
+  private readonly usersTable = 'node1_users'; // Supabase table name
 
   constructor() {
     if (!config.database.supabase.url || !config.database.supabase.anonKey) {
@@ -94,7 +95,7 @@ class SupabaseAdapter implements DatabaseAdapter {
   private async testConnection(): Promise<void> {
     try {
       logger.info('Testing Supabase connection...');
-      const { data, error } = await this.client.from('users').select('count').limit(1);
+      const { data, error } = await this.client.from(this.usersTable).select('count').limit(1);
       
       if (error && error.code !== 'PGRST116') { // PGRST116 is "table not found" which is OK
         throw error;
@@ -123,7 +124,7 @@ class SupabaseAdapter implements DatabaseAdapter {
   // Supabase-specific methods
   async insertUser(userData: any): Promise<any> {
     const { data, error } = await this.client
-      .from('users')
+      .from(this.usersTable)
       .insert(userData)
       .select()
       .single();
@@ -134,7 +135,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async findUserByEmail(email: string): Promise<any> {
     const { data, error } = await this.client
-      .from('users')
+      .from(this.usersTable)
       .select('*')
       .eq('api_user', email)
       .single();
@@ -145,7 +146,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async findUserById(id: string): Promise<any> {
     const { data, error } = await this.client
-      .from('users')
+      .from(this.usersTable)
       .select('id, api_user, full_name, email, total_logins, created_at')
       .eq('id', id)
       .single();
@@ -155,9 +156,20 @@ class SupabaseAdapter implements DatabaseAdapter {
   }
 
   async updateUserLogins(id: string): Promise<void> {
+    // First get current total_logins
+    const { data: currentUser, error: fetchError } = await this.client
+      .from(this.usersTable)
+      .select('total_logins')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    const newTotal = (currentUser.total_logins || 0) + 1;
+    
     const { error } = await this.client
-      .from('users')
-      .update({ total_logins: this.client.sql`total_logins + 1` })
+      .from(this.usersTable)
+      .update({ total_logins: newTotal })
       .eq('id', id);
     
     if (error) throw error;
@@ -198,9 +210,20 @@ class SupabaseAdapter implements DatabaseAdapter {
   }
 
   async incrementKeyValueRetrieved(uuid: string): Promise<void> {
+    // First get current retrieved count
+    const { data: currentData, error: fetchError } = await this.client
+      .from('key_values')
+      .select('retrieved')
+      .eq('uuid', uuid)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    const newCount = (currentData.retrieved || 0) + 1;
+    
     const { error } = await this.client
       .from('key_values')
-      .update({ retrieved: this.client.sql`retrieved + 1` })
+      .update({ retrieved: newCount })
       .eq('uuid', uuid);
     
     if (error) throw error;
