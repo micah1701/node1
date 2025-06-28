@@ -12,6 +12,7 @@ export interface DatabaseAdapter {
   execute(sql: string, params?: any[]): Promise<any>;
   close(): Promise<void>;
   isConnected(): boolean;
+  getTableName(baseName: string): string;
 }
 
 // MySQL adapter
@@ -54,6 +55,10 @@ class MySQLAdapter implements DatabaseAdapter {
     }
   }
 
+  getTableName(baseName: string): string {
+    return `${config.database.tablePrefix}${baseName}`;
+  }
+
   async query(sql: string, params?: any[]): Promise<any> {
     const [rows] = await this.pool.execute(sql, params);
     return rows;
@@ -76,7 +81,6 @@ class MySQLAdapter implements DatabaseAdapter {
 class SupabaseAdapter implements DatabaseAdapter {
   private client: any;
   private connected: boolean = false;
-  private readonly usersTable = 'node1_users'; // Supabase table name
 
   constructor() {
     if (!config.database.supabase.url || !config.database.supabase.anonKey) {
@@ -95,7 +99,7 @@ class SupabaseAdapter implements DatabaseAdapter {
   private async testConnection(): Promise<void> {
     try {
       logger.info('Testing Supabase connection...');
-      const { data, error } = await this.client.from(this.usersTable).select('count').limit(1);
+      const { data, error } = await this.client.from(this.getTableName('users')).select('count').limit(1);
       
       if (error && error.code !== 'PGRST116') { // PGRST116 is "table not found" which is OK
         throw error;
@@ -107,6 +111,10 @@ class SupabaseAdapter implements DatabaseAdapter {
       this.connected = false;
       logger.error('Supabase connection failed:', error.message);
     }
+  }
+
+  getTableName(baseName: string): string {
+    return `${config.database.tablePrefix}${baseName}`;
   }
 
   async query(sql: string, params?: any[]): Promise<any> {
@@ -124,7 +132,7 @@ class SupabaseAdapter implements DatabaseAdapter {
   // Supabase-specific methods
   async insertUser(userData: any): Promise<any> {
     const { data, error } = await this.client
-      .from(this.usersTable)
+      .from(this.getTableName('users'))
       .insert(userData)
       .select()
       .single();
@@ -135,7 +143,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async findUserByEmail(email: string): Promise<any> {
     const { data, error } = await this.client
-      .from(this.usersTable)
+      .from(this.getTableName('users'))
       .select('*')
       .eq('api_user', email)
       .single();
@@ -146,7 +154,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async findUserById(id: string): Promise<any> {
     const { data, error } = await this.client
-      .from(this.usersTable)
+      .from(this.getTableName('users'))
       .select('id, api_user, full_name, email, total_logins, created_at')
       .eq('id', id)
       .single();
@@ -158,7 +166,7 @@ class SupabaseAdapter implements DatabaseAdapter {
   async updateUserLogins(id: string): Promise<void> {
     // First get current total_logins
     const { data: currentUser, error: fetchError } = await this.client
-      .from(this.usersTable)
+      .from(this.getTableName('users'))
       .select('total_logins')
       .eq('id', id)
       .single();
@@ -168,7 +176,7 @@ class SupabaseAdapter implements DatabaseAdapter {
     const newTotal = (currentUser.total_logins || 0) + 1;
     
     const { error } = await this.client
-      .from(this.usersTable)
+      .from(this.getTableName('users'))
       .update({ total_logins: newTotal })
       .eq('id', id);
     
@@ -177,7 +185,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async insertKeyValue(uuid: string, keyName: string, encryptedValue: string): Promise<void> {
     const { error } = await this.client
-      .from('key_values')
+      .from(this.getTableName('key_values'))
       .insert({
         uuid,
         key_name: keyName,
@@ -189,7 +197,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async updateKeyValue(uuid: string, encryptedValue: string): Promise<any> {
     const { data, error } = await this.client
-      .from('key_values')
+      .from(this.getTableName('key_values'))
       .update({ encrypted_value: encryptedValue })
       .eq('uuid', uuid)
       .select();
@@ -200,7 +208,7 @@ class SupabaseAdapter implements DatabaseAdapter {
 
   async getKeyValue(uuid: string): Promise<any> {
     const { data, error } = await this.client
-      .from('key_values')
+      .from(this.getTableName('key_values'))
       .select('key_name, encrypted_value')
       .eq('uuid', uuid)
       .single();
@@ -212,7 +220,7 @@ class SupabaseAdapter implements DatabaseAdapter {
   async incrementKeyValueRetrieved(uuid: string): Promise<void> {
     // First get current retrieved count
     const { data: currentData, error: fetchError } = await this.client
-      .from('key_values')
+      .from(this.getTableName('key_values'))
       .select('retrieved')
       .eq('uuid', uuid)
       .single();
@@ -222,7 +230,7 @@ class SupabaseAdapter implements DatabaseAdapter {
     const newCount = (currentData.retrieved || 0) + 1;
     
     const { error } = await this.client
-      .from('key_values')
+      .from(this.getTableName('key_values'))
       .update({ retrieved: newCount })
       .eq('uuid', uuid);
     
@@ -264,4 +272,4 @@ export const testDatabaseConnection = async () => dbAdapter.isConnected();
 // Export Supabase client if using Supabase
 export const supabase = config.database.type === 'postgres' ? (dbAdapter as SupabaseAdapter).getClient() : null;
 
-logger.info(`Database adapter initialized: ${config.database.type}`);
+logger.info(`Database adapter initialized: ${config.database.type} with table prefix: "${config.database.tablePrefix}"`);

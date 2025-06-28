@@ -5,8 +5,8 @@ import { config } from '../config';
 
 dotenv.config();
 
-const createUsersTableMySQL = `
-CREATE TABLE IF NOT EXISTS users (
+const createUsersTableMySQL = (tableName: string) => `
+CREATE TABLE IF NOT EXISTS ${tableName} (
   id INT AUTO_INCREMENT PRIMARY KEY,
   api_user VARCHAR(255) NOT NULL UNIQUE,
   api_secret VARCHAR(255) NOT NULL,
@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `;
 
-const createKeyValuesTable = `
-CREATE TABLE IF NOT EXISTS key_values (
+const createKeyValuesTableMySQL = (tableName: string) => `
+CREATE TABLE IF NOT EXISTS ${tableName} (
   id INT AUTO_INCREMENT PRIMARY KEY,
   uuid VARCHAR(36) NOT NULL UNIQUE,
   key_name VARCHAR(255) NOT NULL,
@@ -42,13 +42,16 @@ async function setupMySQLDatabase() {
 
     logger.info('Connected to MySQL database');
 
+    const usersTableName = `${config.database.tablePrefix}users`;
+    const keyValuesTableName = `${config.database.tablePrefix}key_values`;
+
     // Create users table
-    await connection.execute(createUsersTableMySQL);
-    logger.info('MySQL users table created successfully');
+    await connection.execute(createUsersTableMySQL(usersTableName));
+    logger.info(`MySQL users table created successfully: ${usersTableName}`);
 
     // Create key_values table
-    await connection.execute(createKeyValuesTable);
-    logger.info('MySQL key-values table created successfully');
+    await connection.execute(createKeyValuesTableMySQL(keyValuesTableName));
+    logger.info(`MySQL key-values table created successfully: ${keyValuesTableName}`);
 
     await connection.end();
     logger.info('MySQL database setup completed');
@@ -59,9 +62,12 @@ async function setupMySQLDatabase() {
 }
 
 async function setupSupabaseDatabase() {
+  const usersTableName = `${config.database.tablePrefix}users`;
+  const keyValuesTableName = `${config.database.tablePrefix}key_values`;
+
   logger.info('For Supabase setup, please ensure the following tables exist:');
   logger.info('');
-  logger.info('1. Table: node1_users');
+  logger.info(`1. Table: ${usersTableName}`);
   logger.info('   Columns:');
   logger.info('   - id (bigint, primary key, auto-increment)');
   logger.info('   - api_user (text, unique)');
@@ -72,7 +78,7 @@ async function setupSupabaseDatabase() {
   logger.info('   - created_at (timestamp with time zone, default now())');
   logger.info('   - modified_at (timestamp with time zone, default now())');
   logger.info('');
-  logger.info('2. Table: key_values');
+  logger.info(`2. Table: ${keyValuesTableName}`);
   logger.info('   Columns:');
   logger.info('   - id (bigint, primary key, auto-increment)');
   logger.info('   - uuid (text, unique)');
@@ -84,9 +90,9 @@ async function setupSupabaseDatabase() {
   logger.info('');
   logger.info('You can create these tables in the Supabase dashboard SQL editor.');
   logger.info('');
-  logger.info('SQL for node1_users table:');
+  logger.info(`SQL for ${usersTableName} table:`);
   logger.info(`
-CREATE TABLE IF NOT EXISTS node1_users (
+CREATE TABLE IF NOT EXISTS ${usersTableName} (
   id BIGSERIAL PRIMARY KEY,
   api_user TEXT UNIQUE NOT NULL,
   api_secret TEXT NOT NULL,
@@ -106,14 +112,14 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_node1_users_modified_at BEFORE UPDATE
-    ON node1_users FOR EACH ROW EXECUTE FUNCTION update_modified_at_column();
+CREATE TRIGGER update_${usersTableName}_modified_at BEFORE UPDATE
+    ON ${usersTableName} FOR EACH ROW EXECUTE FUNCTION update_modified_at_column();
   `);
   
   logger.info('');
-  logger.info('SQL for key_values table:');
+  logger.info(`SQL for ${keyValuesTableName} table:`);
   logger.info(`
-CREATE TABLE IF NOT EXISTS key_values (
+CREATE TABLE IF NOT EXISTS ${keyValuesTableName} (
   id BIGSERIAL PRIMARY KEY,
   uuid TEXT UNIQUE NOT NULL,
   key_name TEXT NOT NULL,
@@ -123,14 +129,16 @@ CREATE TABLE IF NOT EXISTS key_values (
   modified_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_key_values_uuid ON key_values(uuid);
+CREATE INDEX IF NOT EXISTS idx_${keyValuesTableName}_uuid ON ${keyValuesTableName}(uuid);
 
-CREATE TRIGGER update_key_values_modified_at BEFORE UPDATE
-    ON key_values FOR EACH ROW EXECUTE FUNCTION update_modified_at_column();
+CREATE TRIGGER update_${keyValuesTableName}_modified_at BEFORE UPDATE
+    ON ${keyValuesTableName} FOR EACH ROW EXECUTE FUNCTION update_modified_at_column();
   `);
 }
 
 async function setupDatabase() {
+  logger.info(`Using table prefix: "${config.database.tablePrefix}"`);
+  
   if (config.database.type === 'mysql') {
     logger.info('Setting up MySQL database...');
     await setupMySQLDatabase();

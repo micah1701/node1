@@ -27,8 +27,9 @@ export const storeKeyValue = async (req: Request, res: Response, next: NextFunct
     const encryptedValue = encryptWithMasterKey(value);
 
     if (config.database.type === 'mysql') {
+      const keyValuesTable = db.getTableName('key_values');
       await db.execute(
-        'INSERT INTO key_values (uuid, key_name, encrypted_value) VALUES (?, ?, ?)',
+        `INSERT INTO ${keyValuesTable} (uuid, key_name, encrypted_value) VALUES (?, ?, ?)`,
         [uuid, key, encryptedValue]
       );
     } else {
@@ -64,8 +65,9 @@ export const updateKeyValue = async (req: Request, res: Response, next: NextFunc
     const encryptedValue = encryptWithMasterKey(value);
 
     if (config.database.type === 'mysql') {
+      const keyValuesTable = db.getTableName('key_values');
       const [result] = await db.execute(
-        'UPDATE key_values SET encrypted_value = ? WHERE uuid = ?',
+        `UPDATE ${keyValuesTable} SET encrypted_value = ? WHERE uuid = ?`,
         [encryptedValue, uuid]
       ) as [any, any];
 
@@ -103,8 +105,9 @@ export const getKeyValue = async (req: Request, res: Response, next: NextFunctio
     let keyValueData;
 
     if (config.database.type === 'mysql') {
+      const keyValuesTable = db.getTableName('key_values');
       const [rows] = await db.execute(
-        'SELECT key_name, encrypted_value FROM key_values WHERE uuid = ?',
+        `SELECT key_name, encrypted_value FROM ${keyValuesTable} WHERE uuid = ?`,
         [uuid]
       ) as [any[], any];
 
@@ -116,7 +119,7 @@ export const getKeyValue = async (req: Request, res: Response, next: NextFunctio
 
       // Increment retrieved counter
       await db.execute(
-        'UPDATE key_values SET retrieved = retrieved + 1 WHERE uuid = ?',
+        `UPDATE ${keyValuesTable} SET retrieved = retrieved + 1 WHERE uuid = ?`,
         [uuid]
       );
     } else {

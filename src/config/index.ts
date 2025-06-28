@@ -21,6 +21,7 @@ export const config = {
   
   database: {
     type: (process.env.DATABASE_TYPE || 'postgres') as DatabaseType,
+    tablePrefix: process.env.TABLE_PREFIX || '',
     
     // MySQL configuration
     mysql: {

@@ -22,8 +22,9 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     
     if (config.database.type === 'mysql') {
       // MySQL implementation
+      const usersTable = db.getTableName('users');
       const [result] = await db.execute(
-        'INSERT INTO users (api_user, api_secret, full_name, email) VALUES (?, ?, ?, ?)',
+        `INSERT INTO ${usersTable} (api_user, api_secret, full_name, email) VALUES (?, ?, ?, ?)`,
         [email, hashedPassword, name, email]
       );
       
@@ -31,7 +32,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       
       // Get the created user
       const [users] = await db.execute(
-        'SELECT id, api_user, full_name, email, created_at FROM users WHERE id = ?',
+        `SELECT id, api_user, full_name, email, created_at FROM ${usersTable} WHERE id = ?`,
         [insertResult.insertId]
       ) as [any[], any];
       
@@ -77,8 +78,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     
     if (config.database.type === 'mysql') {
       // MySQL implementation
+      const usersTable = db.getTableName('users');
       const [users] = await db.execute(
-        'SELECT * FROM users WHERE api_user = ?',
+        `SELECT * FROM ${usersTable} WHERE api_user = ?`,
         [email]
       ) as [any[], any];
       
@@ -100,8 +102,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     
     // Increment total_logins
     if (config.database.type === 'mysql') {
+      const usersTable = db.getTableName('users');
       await db.execute(
-        'UPDATE users SET total_logins = total_logins + 1 WHERE id = ?',
+        `UPDATE ${usersTable} SET total_logins = total_logins + 1 WHERE id = ?`,
         [user.id]
       );
     } else {
@@ -140,8 +143,9 @@ export const getProfile = async (req: Request, res: Response, next: NextFunction
     
     if (config.database.type === 'mysql') {
       // MySQL implementation
+      const usersTable = db.getTableName('users');
       const [users] = await db.execute(
-        'SELECT id, api_user, full_name, email, total_logins, created_at FROM users WHERE id = ?',
+        `SELECT id, api_user, full_name, email, total_logins, created_at FROM ${usersTable} WHERE id = ?`,
         [req.user.id]
       ) as [any[], any];
       
