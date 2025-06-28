@@ -13,10 +13,30 @@ if (!process.env.MASTER_ENCRYPTION_KEY) {
 }
 
 type JwtExpiration = SignOptions['expiresIn'];
+type DatabaseType = 'mysql' | 'postgres';
 
 export const config = {
   port: process.env.PORT || 3000,
   environment: process.env.NODE_ENV || 'development',
+  
+  database: {
+    type: (process.env.DATABASE_TYPE || 'postgres') as DatabaseType,
+    
+    // MySQL configuration
+    mysql: {
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || '',
+      port: parseInt(process.env.DB_PORT || '3306', 10)
+    },
+    
+    // Supabase configuration
+    supabase: {
+      url: process.env.VITE_SUPABASE_URL || '',
+      anonKey: process.env.VITE_SUPABASE_ANON_KEY || ''
+    }
+  },
   
   jwt: {
     secret: process.env.JWT_SECRET,

@@ -1,159 +1,244 @@
 import mysql from 'mysql2/promise';
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { logger } from './logger';
+import { config } from '../config';
 
 dotenv.config();
 
-// Database configuration with explicit type conversion and defaults
-const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || '',
-  port: parseInt(process.env.DB_PORT || '3306', 10),
-  connectTimeout: 20000, // 20 seconds
-  acquireTimeout: 20000, // 20 seconds
-  timeout: 20000, // 20 seconds
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  reconnect: true,
-  charset: 'utf8mb4'
-};
+// Database abstraction interface
+export interface DatabaseAdapter {
+  query(sql: string, params?: any[]): Promise<any>;
+  execute(sql: string, params?: any[]): Promise<any>;
+  close(): Promise<void>;
+  isConnected(): boolean;
+}
 
-// Create connection pool
-export const pool = mysql.createPool(dbConfig);
+// MySQL adapter
+class MySQLAdapter implements DatabaseAdapter {
+  private pool: mysql.Pool;
+  private connected: boolean = false;
 
-// Track database connection status
-let isDbConnected = false;
+  constructor() {
+    const dbConfig = {
+      host: config.database.mysql.host,
+      user: config.database.mysql.user,
+      password: config.database.mysql.password,
+      database: config.database.mysql.database,
+      port: config.database.mysql.port,
+      connectTimeout: 20000,
+      acquireTimeout: 20000,
+      timeout: 20000,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      reconnect: true,
+      charset: 'utf8mb4'
+    };
 
-// Helper function to safely log connection info (without password)
-const getConnectionInfo = () => {
-  return {
-    host: dbConfig.host,
-    user: dbConfig.user,
-    database: dbConfig.database,
-    port: dbConfig.port,
-    hasPassword: !!dbConfig.password,
-    passwordLength: dbConfig.password ? dbConfig.password.length : 0
-  };
-};
+    this.pool = mysql.createPool(dbConfig);
+    this.testConnection();
+  }
 
-// Test database connection with detailed error logging
-export const testDatabaseConnection = async (): Promise<boolean> => {
-  const connectionInfo = getConnectionInfo();
-  
-  try {
-    logger.info('Attempting database connection with config:', connectionInfo);
+  private async testConnection(): Promise<void> {
+    try {
+      logger.info('Testing MySQL connection...');
+      const connection = await this.pool.getConnection();
+      await connection.execute('SELECT 1 as test');
+      connection.release();
+      this.connected = true;
+      logger.info('Successfully connected to MySQL database');
+    } catch (error: any) {
+      this.connected = false;
+      logger.error('MySQL connection failed:', error.message);
+    }
+  }
+
+  async query(sql: string, params?: any[]): Promise<any> {
+    const [rows] = await this.pool.execute(sql, params);
+    return rows;
+  }
+
+  async execute(sql: string, params?: any[]): Promise<any> {
+    return await this.pool.execute(sql, params);
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+}
+
+// Supabase adapter
+class SupabaseAdapter implements DatabaseAdapter {
+  private client: any;
+  private connected: boolean = false;
+
+  constructor() {
+    if (!config.database.supabase.url || !config.database.supabase.anonKey) {
+      logger.error('Supabase URL and anon key are required for PostgreSQL connection');
+      return;
+    }
+
+    this.client = createClient(
+      config.database.supabase.url,
+      config.database.supabase.anonKey
+    );
     
-    // Log environment variables (safely)
-    logger.info('Environment variables check:', {
-      DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
-      DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET', 
-      DB_PASSWORD: process.env.DB_PASSWORD ? 'SET' : 'NOT SET',
-      DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET',
-      DB_PORT: process.env.DB_PORT ? process.env.DB_PORT : 'NOT SET (using default 3306)'
-    });
+    this.testConnection();
+  }
+
+  private async testConnection(): Promise<void> {
+    try {
+      logger.info('Testing Supabase connection...');
+      const { data, error } = await this.client.from('users').select('count').limit(1);
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "table not found" which is OK
+        throw error;
+      }
+      
+      this.connected = true;
+      logger.info('Successfully connected to Supabase (PostgreSQL)');
+    } catch (error: any) {
+      this.connected = false;
+      logger.error('Supabase connection failed:', error.message);
+    }
+  }
+
+  async query(sql: string, params?: any[]): Promise<any> {
+    // For Supabase, we'll need to convert SQL to Supabase queries
+    // This is a simplified implementation - you might need more sophisticated SQL parsing
+    throw new Error('Raw SQL queries not directly supported with Supabase adapter. Use execute() for specific operations.');
+  }
+
+  async execute(sql: string, params?: any[]): Promise<any> {
+    // This method will handle specific database operations
+    // For now, we'll implement the most common operations
+    throw new Error('Execute method needs to be implemented for specific operations');
+  }
+
+  // Supabase-specific methods
+  async insertUser(userData: any): Promise<any> {
+    const { data, error } = await this.client
+      .from('users')
+      .insert(userData)
+      .select()
+      .single();
     
-    // Test with a simple connection first
-    logger.info('Creating test connection...');
-    const connection = await pool.getConnection();
+    if (error) throw error;
+    return data;
+  }
+
+  async findUserByEmail(email: string): Promise<any> {
+    const { data, error } = await this.client
+      .from('users')
+      .select('*')
+      .eq('api_user', email)
+      .single();
     
-    logger.info('Connection established, testing query...');
-    const [rows] = await connection.execute('SELECT 1 as test');
-    logger.info('Test query successful:', rows);
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  async findUserById(id: string): Promise<any> {
+    const { data, error } = await this.client
+      .from('users')
+      .select('id, api_user, full_name, email, total_logins, created_at')
+      .eq('id', id)
+      .single();
     
-    connection.release();
-    logger.info('Successfully connected to MySQL database');
-    isDbConnected = true;
-    return true;
-  } catch (error: any) {
-    isDbConnected = false;
+    if (error) throw error;
+    return data;
+  }
+
+  async updateUserLogins(id: string): Promise<void> {
+    const { error } = await this.client
+      .from('users')
+      .update({ total_logins: this.client.sql`total_logins + 1` })
+      .eq('id', id);
     
-    // Log detailed connection attempt info
-    logger.error('Database connection failed');
-    logger.error('Connection attempted with:', connectionInfo);
-    
-    // Log specific error details
-    if (error) {
-      logger.error('Error details:', {
-        message: error.message || 'No error message',
-        code: error.code || 'No error code',
-        errno: error.errno || 'No errno',
-        syscall: error.syscall || 'No syscall',
-        fatal: error.fatal || false,
-        sqlState: error.sqlState || 'No SQL state',
-        sqlMessage: error.sqlMessage || 'No SQL message'
+    if (error) throw error;
+  }
+
+  async insertKeyValue(uuid: string, keyName: string, encryptedValue: string): Promise<void> {
+    const { error } = await this.client
+      .from('key_values')
+      .insert({
+        uuid,
+        key_name: keyName,
+        encrypted_value: encryptedValue
       });
-      
-      // Provide helpful error interpretation
-      if (error.code === 'ETIMEDOUT') {
-        logger.error('Connection timed out - check if database server is running and accessible');
-        logger.error('Possible causes:');
-        logger.error('- Database server is not running');
-        logger.error('- Firewall blocking connection');
-        logger.error('- Wrong host/port configuration');
-        logger.error('- Network connectivity issues');
-      } else if (error.code === 'ECONNREFUSED') {
-        logger.error('Connection refused - database server may not be running on the specified host/port');
-      } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
-        logger.error('Access denied - check username and password');
-      } else if (error.code === 'ER_BAD_DB_ERROR') {
-        logger.error('Database does not exist - check database name');
-      } else if (error.code === 'ENOTFOUND') {
-        logger.error('Host not found - check if the hostname is correct');
-      }
-      
-      // Log the full stack trace for debugging
-      if (error.stack) {
-        logger.error('Full error stack:', error.stack);
-      }
-    }
     
-    logger.warn('Server will continue without database connectivity');
-    return false;
+    if (error) throw error;
   }
-};
 
-// Alternative connection test using direct mysql connection (not pool)
-export const testDirectConnection = async (): Promise<boolean> => {
-  const connectionInfo = getConnectionInfo();
-  
-  try {
-    logger.info('Testing direct MySQL connection (not pool)...');
+  async updateKeyValue(uuid: string, encryptedValue: string): Promise<any> {
+    const { data, error } = await this.client
+      .from('key_values')
+      .update({ encrypted_value: encryptedValue })
+      .eq('uuid', uuid)
+      .select();
     
-    const connection = await mysql.createConnection({
-      host: dbConfig.host,
-      user: dbConfig.user,
-      password: dbConfig.password,
-      database: dbConfig.database,
-      port: dbConfig.port,
-      connectTimeout: 10000
-    });
-    
-    logger.info('Direct connection successful');
-    await connection.end();
-    return true;
-  } catch (error: any) {
-    logger.error('Direct connection also failed:', {
-      message: error.message,
-      code: error.code
-    });
-    return false;
+    if (error) throw error;
+    return data;
   }
-};
 
-// Export database connection status
-export const isDatabaseConnected = (): boolean => isDbConnected;
+  async getKeyValue(uuid: string): Promise<any> {
+    const { data, error } = await this.client
+      .from('key_values')
+      .select('key_name, encrypted_value')
+      .eq('uuid', uuid)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 
-// Initialize connection test (non-blocking)
-testDatabaseConnection()
-  .then(async (success) => {
-    if (!success) {
-      logger.info('Attempting direct connection test...');
-      await testDirectConnection();
-    }
-  })
-  .catch(() => {
-    // Error already logged in testDatabaseConnection
-  });
+  async incrementKeyValueRetrieved(uuid: string): Promise<void> {
+    const { error } = await this.client
+      .from('key_values')
+      .update({ retrieved: this.client.sql`retrieved + 1` })
+      .eq('uuid', uuid);
+    
+    if (error) throw error;
+  }
+
+  async close(): Promise<void> {
+    // Supabase client doesn't need explicit closing
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  getClient() {
+    return this.client;
+  }
+}
+
+// Create the appropriate database adapter based on configuration
+let dbAdapter: DatabaseAdapter;
+
+if (config.database.type === 'mysql') {
+  logger.info('Initializing MySQL database adapter');
+  dbAdapter = new MySQLAdapter();
+} else if (config.database.type === 'postgres') {
+  logger.info('Initializing Supabase (PostgreSQL) database adapter');
+  dbAdapter = new SupabaseAdapter();
+} else {
+  throw new Error(`Unsupported database type: ${config.database.type}`);
+}
+
+// Export the database adapter and legacy pool for backward compatibility
+export const db = dbAdapter;
+export const pool = dbAdapter; // For backward compatibility with existing code
+export const isDatabaseConnected = () => dbAdapter.isConnected();
+export const testDatabaseConnection = async () => dbAdapter.isConnected();
+
+// Export Supabase client if using Supabase
+export const supabase = config.database.type === 'postgres' ? (dbAdapter as SupabaseAdapter).getClient() : null;
+
+logger.info(`Database adapter initialized: ${config.database.type}`);

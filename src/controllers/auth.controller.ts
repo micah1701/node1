@@ -4,7 +4,8 @@ import { ApiError } from '../middlewares/error.middleware';
 import { HttpStatus, LoginRequest, RegisterRequest, ApiResponse, TokenResponse } from '../types';
 import { generateToken, generateRefreshToken } from '../utils/jwt.utils';
 import { logger } from '../utils/logger';
-import { pool } from '../utils/db';
+import { db } from '../utils/db';
+import { config } from '../config';
 
 /**
  * Register a new user
@@ -17,23 +18,37 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    // Create user
-    const [result] = await pool.execute(
-      'INSERT INTO users (api_user, api_secret, full_name, email) VALUES (?, ?, ?, ?)',
-      [email, hashedPassword, name, email]
-    );
+    let user;
     
-    const insertResult = result as { insertId: number };
+    if (config.database.type === 'mysql') {
+      // MySQL implementation
+      const [result] = await db.execute(
+        'INSERT INTO users (api_user, api_secret, full_name, email) VALUES (?, ?, ?, ?)',
+        [email, hashedPassword, name, email]
+      );
+      
+      const insertResult = result as { insertId: number };
+      
+      // Get the created user
+      const [users] = await db.execute(
+        'SELECT id, api_user, full_name, email, created_at FROM users WHERE id = ?',
+        [insertResult.insertId]
+      ) as [any[], any];
+      
+      user = users[0];
+    } else {
+      // Supabase implementation
+      const userData = {
+        api_user: email,
+        api_secret: hashedPassword,
+        full_name: name,
+        email: email
+      };
+      
+      user = await (db as any).insertUser(userData);
+    }
     
     logger.info(`User registered: ${email}`);
-    
-    // Get the created user
-    const [users] = await pool.execute(
-      'SELECT id, api_user, full_name, email, created_at FROM users WHERE id = ?',
-      [insertResult.insertId]
-    ) as [any[], any];
-    
-    const user = users[0];
     
     const response: ApiResponse<typeof user> = {
       success: true,
@@ -43,7 +58,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     
     res.status(HttpStatus.CREATED).json(response);
   } catch (error: any) {
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
       next(new ApiError(HttpStatus.BAD_REQUEST, 'User already exists'));
     } else {
       next(error);
@@ -58,13 +73,21 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = req.body as LoginRequest;
     
-    // Find user
-    const [users] = await pool.execute(
-      'SELECT * FROM users WHERE api_user = ?',
-      [email]
-    ) as [any[], any];
+    let user;
     
-    const user = users[0];
+    if (config.database.type === 'mysql') {
+      // MySQL implementation
+      const [users] = await db.execute(
+        'SELECT * FROM users WHERE api_user = ?',
+        [email]
+      ) as [any[], any];
+      
+      user = users[0];
+    } else {
+      // Supabase implementation
+      user = await (db as any).findUserByEmail(email);
+    }
+    
     if (!user) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'Invalid credentials');
     }
@@ -76,10 +99,14 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     }
     
     // Increment total_logins
-    await pool.execute(
-      'UPDATE users SET total_logins = total_logins + 1 WHERE id = ?',
-      [user.id]
-    );
+    if (config.database.type === 'mysql') {
+      await db.execute(
+        'UPDATE users SET total_logins = total_logins + 1 WHERE id = ?',
+        [user.id]
+      );
+    } else {
+      await (db as any).updateUserLogins(user.id);
+    }
     
     // Generate tokens
     const payload = { id: user.id.toString(), email: user.email, role: 'user' };
@@ -109,13 +136,21 @@ export const getProfile = async (req: Request, res: Response, next: NextFunction
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'Not authenticated');
     }
     
-    // Find user by id
-    const [users] = await pool.execute(
-      'SELECT id, api_user, full_name, email, total_logins, created_at FROM users WHERE id = ?',
-      [req.user.id]
-    ) as [any[], any];
+    let user;
     
-    const user = users[0];
+    if (config.database.type === 'mysql') {
+      // MySQL implementation
+      const [users] = await db.execute(
+        'SELECT id, api_user, full_name, email, total_logins, created_at FROM users WHERE id = ?',
+        [req.user.id]
+      ) as [any[], any];
+      
+      user = users[0];
+    } else {
+      // Supabase implementation
+      user = await (db as any).findUserById(req.user.id);
+    }
+    
     if (!user) {
       throw new ApiError(HttpStatus.NOT_FOUND, 'User not found');
     }

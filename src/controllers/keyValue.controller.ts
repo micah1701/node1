@@ -2,9 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiError } from '../middlewares/error.middleware';
 import { HttpStatus, ApiResponse } from '../types';
-import { pool } from '../utils/db';
+import { db } from '../utils/db';
 import { encryptWithMasterKey, decryptWithMasterKey } from '../utils/encryption';
 import { logger } from '../utils/logger';
+import { config } from '../config';
 
 interface KeyValuePair {
   key: string;
@@ -25,10 +26,14 @@ export const storeKeyValue = async (req: Request, res: Response, next: NextFunct
     const uuid = uuidv4();
     const encryptedValue = encryptWithMasterKey(value);
 
-    await pool.execute(
-      'INSERT INTO key_values (uuid, key_name, encrypted_value) VALUES (?, ?, ?)',
-      [uuid, key, encryptedValue]
-    );
+    if (config.database.type === 'mysql') {
+      await db.execute(
+        'INSERT INTO key_values (uuid, key_name, encrypted_value) VALUES (?, ?, ?)',
+        [uuid, key, encryptedValue]
+      );
+    } else {
+      await (db as any).insertKeyValue(uuid, key, encryptedValue);
+    }
 
     logger.info(`Stored new key-value pair with UUID: ${uuid}`);
 
@@ -58,13 +63,20 @@ export const updateKeyValue = async (req: Request, res: Response, next: NextFunc
 
     const encryptedValue = encryptWithMasterKey(value);
 
-    const [result] = await pool.execute(
-      'UPDATE key_values SET encrypted_value = ? WHERE uuid = ?',
-      [encryptedValue, uuid]
-    ) as [any, any];
+    if (config.database.type === 'mysql') {
+      const [result] = await db.execute(
+        'UPDATE key_values SET encrypted_value = ? WHERE uuid = ?',
+        [encryptedValue, uuid]
+      ) as [any, any];
 
-    if (result.affectedRows === 0) {
-      throw new ApiError(HttpStatus.NOT_FOUND, 'Key-value pair not found');
+      if (result.affectedRows === 0) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Key-value pair not found');
+      }
+    } else {
+      const result = await (db as any).updateKeyValue(uuid, encryptedValue);
+      if (!result || result.length === 0) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Key-value pair not found');
+      }
     }
 
     logger.info(`Updated key-value pair with UUID: ${uuid}`);
@@ -88,23 +100,38 @@ export const getKeyValue = async (req: Request, res: Response, next: NextFunctio
   try {
     const { uuid } = req.params;
 
-    const [rows] = await pool.execute(
-      'SELECT key_name, encrypted_value FROM key_values WHERE uuid = ?',
-      [uuid]
-    ) as [any[], any];
+    let keyValueData;
 
-    if (rows.length === 0) {
-      throw new ApiError(HttpStatus.NOT_FOUND, 'Key-value pair not found');
+    if (config.database.type === 'mysql') {
+      const [rows] = await db.execute(
+        'SELECT key_name, encrypted_value FROM key_values WHERE uuid = ?',
+        [uuid]
+      ) as [any[], any];
+
+      if (rows.length === 0) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Key-value pair not found');
+      }
+
+      keyValueData = rows[0];
+
+      // Increment retrieved counter
+      await db.execute(
+        'UPDATE key_values SET retrieved = retrieved + 1 WHERE uuid = ?',
+        [uuid]
+      );
+    } else {
+      keyValueData = await (db as any).getKeyValue(uuid);
+      
+      if (!keyValueData) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Key-value pair not found');
+      }
+
+      // Increment retrieved counter
+      await (db as any).incrementKeyValueRetrieved(uuid);
     }
 
-    const { key_name, encrypted_value } = rows[0];
+    const { key_name, encrypted_value } = keyValueData;
     const decryptedValue = decryptWithMasterKey(encrypted_value);
-
-    // Increment retrieved counter
-    await pool.execute(
-      'UPDATE key_values SET retrieved = retrieved + 1 WHERE uuid = ?',
-      [uuid]
-    );
 
     logger.info(`Retrieved key-value pair with UUID: ${uuid}`);
 
