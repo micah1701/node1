@@ -107,12 +107,18 @@ class SupabaseDatabase implements DatabaseInterface {
 
   async updateUserLogins(id: string) {
     const tableName = this.getTableName('users');
+    const { data, error: selectError } = await this.client
+      .from(tableName)
+      .select('total_logins')
+      .eq('id', id)
+      .single();
+    if (selectError) { throw selectError;}
+    const newTotalLogins = (data?.total_logins ?? 0) + 1;
     const { error } = await this.client
       .from(tableName)
-      .update({ total_logins: this.client.`total_logins + 1` })
-      .eq('id', id);
-    
-    if (error) throw error;
+      .update({ total_logins: newTotalLogins })
+      .eq('id', id);    
+    if (error) { throw error; }
   }
 
   async insertKeyValue(uuid: string, key: string, encryptedValue: string) {
@@ -154,12 +160,19 @@ class SupabaseDatabase implements DatabaseInterface {
 
   async incrementKeyValueRetrieved(uuid: string) {
     const tableName = this.getTableName('key_values');
+
+    const { data, error: selectError } = await this.client
+      .from(tableName)
+      .select('retrieved')
+      .eq('uuid', uuid)
+      .single();
+    if (selectError) { throw selectError;}
+    const newTotalLogins = (data?.retrieved ?? 0) + 1;
     const { error } = await this.client
       .from(tableName)
-      .update({ retrieved: this.client.`retrieved + 1` })
-      .eq('uuid', uuid);
-    
-    if (error) throw error;
+      .update({ total_logins: newTotalLogins })
+      .eq('uuid', uuid);    
+    if (error) { throw error; }
   }
 
   async testConnection(): Promise<boolean> {
