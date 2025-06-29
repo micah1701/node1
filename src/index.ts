@@ -2,11 +2,11 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
-import { config } from './config';
-import { errorHandler } from './middlewares/error.middleware';
+import { config } from './core/config';
+import { errorHandler } from './core/middlewares/error.middleware';
 import routes from './routes';
-import { logger } from './utils/logger';
-import { testDatabaseConnection, isDatabaseConnected } from './utils/db';
+import { logger } from './core/utils/logger';
+import { testDatabaseConnection, isDatabaseConnected } from './core/utils/db';
 
 // Initialize express app
 const app = express();
@@ -106,12 +106,28 @@ app.get('/', (req, res) => {
           color: #6c757d;
           font-size: 0.875rem;
         }
+        .framework-info {
+          background: #fff3cd;
+          border: 1px solid #ffeaa7;
+          padding: 1rem;
+          border-radius: 6px;
+          margin: 1.5rem 0;
+        }
       </style>
     </head>
     <body>
       <div class="container">
         <h1>🚀 TypeScript API Framework</h1>
-        <p class="subtitle">A robust Node.js and TypeScript framework for building RESTful APIs</p>
+        <p class="subtitle">A modular Node.js and TypeScript framework for building RESTful APIs</p>
+        
+        <div class="framework-info">
+          <strong>🏗️ Framework Structure:</strong>
+          <ul style="margin: 0.5rem 0;">
+            <li><strong>Core:</strong> Base framework functionality (auth, encryption, database)</li>
+            <li><strong>App:</strong> Application-specific features and routes</li>
+            <li><strong>Extensible:</strong> Easy to add new features without modifying core</li>
+          </ul>
+        </div>
         
         <div>
           <strong>Server Status:</strong> 
@@ -126,7 +142,7 @@ app.get('/', (req, res) => {
         </div>
         
         <div class="endpoints">
-          <h3>📡 Available API Endpoints</h3>
+          <h3>📡 Core API Endpoints</h3>
           
           <div class="endpoint">
             <span class="method get">GET</span>
@@ -176,6 +192,7 @@ app.get('/', (req, res) => {
             <li>Register a user with <code>/api/auth/register</code></li>
             <li>Login to get access tokens with <code>/api/auth/login</code></li>
             <li>Include <code>Authorization: Bearer <token></code> header for protected routes</li>
+            <li>Add your app-specific routes in <code>src/app/routes/</code></li>
           </ul>
         </div>
         

@@ -1,19 +1,16 @@
 import { Router } from 'express';
-import authRoutes from './auth.routes';
-import keyValueRoutes from './keyValue.routes';
+import coreRoutes from '../core/routes/core.routes';
+import appRoutes from '../app/routes';
 
 const router = Router();
 
-// Health check endpoint
-router.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
-});
+// Mount core framework routes first
+router.use('/', coreRoutes);
 
-// Routes
-router.use('/auth', authRoutes);
-router.use('/key-values', keyValueRoutes);
+// Mount application-specific routes
+router.use('/', appRoutes);
 
-// Handle 404 - API endpoint not found
+// Handle 404 - API endpoint not found (catch-all)
 router.use('*', (req, res) => {
   res.status(404).json({
     success: false,
