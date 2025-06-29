@@ -109,7 +109,7 @@ class SupabaseDatabase implements DatabaseInterface {
     const tableName = this.getTableName('users');
     const { error } = await this.client
       .from(tableName)
-      .update({ total_logins: this.client.sql`.total_logins + 1` })
+      .update({ total_logins: this.client.`total_logins + 1` })
       .eq('id', id);
     
     if (error) throw error;
@@ -156,7 +156,7 @@ class SupabaseDatabase implements DatabaseInterface {
     const tableName = this.getTableName('key_values');
     const { error } = await this.client
       .from(tableName)
-      .update({ retrieved: this.client.sql`.retrieved + 1` })
+      .update({ retrieved: this.client.`retrieved + 1` })
       .eq('uuid', uuid);
     
     if (error) throw error;
