@@ -49,7 +49,7 @@ class SupabaseDatabase implements DatabaseInterface {
 
   constructor() {
     if (!config.database.supabase.url || !config.database.supabase.anonKey) {
-      throw new Error('Supabase configuration is missing');
+      throw new Error('Supabase configuration is missing. Please check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file');
     }
     
     this.client = createClient(
@@ -107,18 +107,25 @@ class SupabaseDatabase implements DatabaseInterface {
 
   async updateUserLogins(id: string) {
     const tableName = this.getTableName('users');
+    
+    // First get current value
     const { data, error: selectError } = await this.client
       .from(tableName)
       .select('total_logins')
       .eq('id', id)
       .single();
-    if (selectError) { throw selectError;}
+    
+    if (selectError) throw selectError;
+    
     const newTotalLogins = (data?.total_logins ?? 0) + 1;
+    
+    // Update with new value
     const { error } = await this.client
       .from(tableName)
       .update({ total_logins: newTotalLogins })
-      .eq('id', id);    
-    if (error) { throw error; }
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 
   async insertKeyValue(uuid: string, key: string, encryptedValue: string) {
@@ -161,29 +168,36 @@ class SupabaseDatabase implements DatabaseInterface {
   async incrementKeyValueRetrieved(uuid: string) {
     const tableName = this.getTableName('key_values');
 
+    // First get current value
     const { data, error: selectError } = await this.client
       .from(tableName)
       .select('retrieved')
       .eq('uuid', uuid)
       .single();
-    if (selectError) { throw selectError;}
-    const newTotalLogins = (data?.retrieved ?? 0) + 1;
+    
+    if (selectError) throw selectError;
+    
+    const newRetrievedCount = (data?.retrieved ?? 0) + 1;
+    
+    // Update with new value
     const { error } = await this.client
       .from(tableName)
-      .update({ total_logins: newTotalLogins })
-      .eq('uuid', uuid);    
-    if (error) { throw error; }
+      .update({ retrieved: newRetrievedCount })
+      .eq('uuid', uuid);
+    
+    if (error) throw error;
   }
 
   async testConnection(): Promise<boolean> {
     try {
-      const { data, error } = await this.client
-        .from('_health')
-        .select('*')
+      // Try a simple query to test the connection
+      const { error } = await this.client
+        .from('information_schema.tables')
+        .select('table_name')
         .limit(1);
       
-      // If the table doesn't exist, that's still a valid connection
-      return !error || error.code === 'PGRST106'; // PGRST106 = table not found
+      // If we get here without an error, connection is working
+      return !error || error.code === 'PGRST106'; // PGRST106 = table not found (still a valid connection)
     } catch (error) {
       logger.error('Supabase connection test failed:', error);
       return false;
