@@ -1,11 +1,10 @@
 import { Router } from 'express';
+import keychainRoutes from './keychain.routes';
 
 const router = Router();
 
-// Application-specific routes will go here
-// Example:
-// import userRoutes from './user.routes';
-// router.use('/users', userRoutes);
+// Application-specific routes
+router.use('/keychain', keychainRoutes);
 
 // Handle 404 for app-specific routes
 router.use('*', (req, res, next) => {

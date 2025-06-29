@@ -13,14 +13,13 @@ if (!process.env.MASTER_ENCRYPTION_KEY) {
 }
 
 type JwtExpiration = SignOptions['expiresIn'];
-type DatabaseType = 'mysql' | 'postgres';
 
 export const config = {
   port: process.env.PORT || 3000,
   environment: process.env.NODE_ENV || 'development',
   
   database: {
-    type: (process.env.DATABASE_TYPE || 'postgres') as DatabaseType,
+    type: process.env.DATABASE_TYPE || 'postgres',
     tablePrefix: process.env.TABLE_PREFIX || '',
     
     // MySQL configuration
@@ -28,8 +27,8 @@ export const config = {
       host: process.env.DB_HOST || 'localhost',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || '',
-      port: parseInt(process.env.DB_PORT || '3306', 10)
+      database: process.env.DB_NAME || 'api_db',
+      port: parseInt(process.env.DB_PORT || '3306')
     },
     
     // Supabase configuration
