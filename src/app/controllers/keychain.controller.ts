@@ -22,7 +22,7 @@ import {
  */
 export const createKeychainApp = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { account_id, account_secret, app_name, encrypt_type = 'default', encrypt_public_key } = req.body as CreateKeychainAppRequest;
+    const { account_id, account_secret, app_name, encrypt_type = 'default', encrypt_public_key = null} = req.body as CreateKeychainAppRequest;
 
     if (!account_id || !account_secret || !app_name) {
       throw new ApiError(HttpStatus.BAD_REQUEST, 'account_id, account_secret, and app_name are required');
