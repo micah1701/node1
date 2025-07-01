@@ -18,6 +18,7 @@ app.use(helmet({
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
       "script-src": ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
+      "script-src-attr": ["'unsafe-inline'"],
       "style-src": ["'self'", "'unsafe-inline'"],
     },
   },
