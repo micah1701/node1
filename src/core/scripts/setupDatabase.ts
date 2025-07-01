@@ -275,67 +275,89 @@ async function setupMySQLDatabase() {
   }
 }
 
+function generateSupabaseSQL() {
+  const tablePrefix = config.database.tablePrefix;
+  
+  const allQueries = [
+    createUsersTablePostgreSQL(`${tablePrefix}users`),
+    createKeyValuesTablePostgreSQL(`${tablePrefix}key_values`),
+    createKeychainAppsTablePostgreSQL(`${tablePrefix}keychain_apps`),
+    createKeychainAppPublicKeysTablePostgreSQL(`${tablePrefix}keychain_app_public_keys`),
+    createKeychainAppPrivateKeysTablePostgreSQL(`${tablePrefix}keychain_app_private_keys`)
+  ];
+
+  const constraintQueries = [
+    `ALTER TABLE ${tablePrefix}keychain_app_public_keys 
+     ADD CONSTRAINT fk_public_keys_app_id 
+     FOREIGN KEY (app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
+     ON DELETE CASCADE;`,
+    
+    `ALTER TABLE ${tablePrefix}keychain_app_private_keys 
+     ADD CONSTRAINT fk_private_keys_app_id 
+     FOREIGN KEY (app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
+     ON DELETE CASCADE;`,
+    
+    `ALTER TABLE ${tablePrefix}keychain_apps 
+     ADD CONSTRAINT fk_apps_encrypt_public_key 
+     FOREIGN KEY (encrypt_public_key) REFERENCES ${tablePrefix}keychain_app_public_keys(id) 
+     ON DELETE SET NULL;`
+  ];
+
+  return [...allQueries, ...constraintQueries].join('\n\n');
+}
+
 async function setupSupabaseDatabase() {
   try {
     if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
       throw new Error('Supabase configuration missing');
     }
 
+    logger.info('='.repeat(80));
+    logger.info('SUPABASE DATABASE SETUP REQUIRED');
+    logger.info('='.repeat(80));
+    logger.info('');
+    logger.info('Supabase does not allow programmatic table creation through the API.');
+    logger.info('You need to manually create the database tables using the Supabase SQL Editor.');
+    logger.info('');
+    logger.info('Please follow these steps:');
+    logger.info('');
+    logger.info('1. Go to your Supabase project dashboard');
+    logger.info('2. Navigate to the SQL Editor');
+    logger.info('3. Copy and paste the following SQL commands:');
+    logger.info('');
+    logger.info('-'.repeat(80));
+    logger.info('SQL COMMANDS TO EXECUTE:');
+    logger.info('-'.repeat(80));
+    logger.info('');
+    
+    const sqlCommands = generateSupabaseSQL();
+    console.log(sqlCommands);
+    
+    logger.info('');
+    logger.info('-'.repeat(80));
+    logger.info('');
+    logger.info('4. Execute the SQL commands in the Supabase SQL Editor');
+    logger.info('5. Verify that all tables have been created successfully');
+    logger.info('');
+    logger.info('After completing these steps, your Supabase database will be ready to use.');
+    logger.info('='.repeat(80));
+
+    // Test connection to verify Supabase is accessible
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL,
       process.env.VITE_SUPABASE_ANON_KEY
     );
 
-    logger.info('Connected to Supabase database');
-
-    const tablePrefix = config.database.tablePrefix;
-
-    // Execute table creation queries
-    const queries = [
-      createUsersTablePostgreSQL(`${tablePrefix}users`),
-      createKeyValuesTablePostgreSQL(`${tablePrefix}key_values`),
-      createKeychainAppsTablePostgreSQL(`${tablePrefix}keychain_apps`),
-      createKeychainAppPublicKeysTablePostgreSQL(`${tablePrefix}keychain_app_public_keys`),
-      createKeychainAppPrivateKeysTablePostgreSQL(`${tablePrefix}keychain_app_private_keys`)
-    ];
-
-    for (const query of queries) {
-      const { error } = await supabase.rpc('exec_sql', { sql: query });
-      if (error) {
-        logger.error('Error executing query:', error);
-        throw error;
-      }
+    // Simple connection test
+    const { error } = await supabase.from('information_schema.tables').select('table_name').limit(1);
+    if (error && !error.message.includes('relation "information_schema.tables" does not exist')) {
+      logger.error('Supabase connection test failed:', error);
+      throw error;
     }
 
-    // Add foreign key constraints
-    const constraintQueries = [
-      `ALTER TABLE ${tablePrefix}keychain_app_public_keys 
-       ADD CONSTRAINT fk_public_keys_app_id 
-       FOREIGN KEY (app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
-       ON DELETE CASCADE;`,
-      
-      `ALTER TABLE ${tablePrefix}keychain_app_private_keys 
-       ADD CONSTRAINT fk_private_keys_app_id 
-       FOREIGN KEY (app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
-       ON DELETE CASCADE;`,
-      
-      `ALTER TABLE ${tablePrefix}keychain_apps 
-       ADD CONSTRAINT fk_apps_encrypt_public_key 
-       FOREIGN KEY (encrypt_public_key) REFERENCES ${tablePrefix}keychain_app_public_keys(id) 
-       ON DELETE SET NULL;`
-    ];
-
-    for (const query of constraintQueries) {
-      const { error } = await supabase.rpc('exec_sql', { sql: query });
-      if (error && !error.message.includes('already exists')) {
-        logger.error('Error adding constraint:', error);
-        // Don't throw here as constraints might already exist
-      }
-    }
-
-    logger.info('Supabase database setup completed');
+    logger.info('Supabase connection verified successfully');
   } catch (error) {
-    logger.error('Error setting up Supabase database:', error);
+    logger.error('Error with Supabase setup:', error);
     throw error;
   }
 }
@@ -350,7 +372,7 @@ async function setupDatabase() {
       throw new Error(`Unsupported database type: ${config.database.type}`);
     }
     
-    logger.info('Database setup completed successfully');
+    logger.info('Database setup process completed successfully');
   } catch (error) {
     logger.error('Error setting up database:', error);
     process.exit(1);
