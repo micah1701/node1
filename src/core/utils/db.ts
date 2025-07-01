@@ -68,7 +68,7 @@ class SupabaseDatabase implements DatabaseInterface {
     return `${config.database.tablePrefix}${tableName}`;
   }
 
-  // Supabase-specific methods
+  // Core user methods
   async insertUser(userData: any) {
     const tableName = this.getTableName('users');
     const { data, error } = await this.client
@@ -128,6 +128,7 @@ class SupabaseDatabase implements DatabaseInterface {
     if (error) throw error;
   }
 
+  // Key-value methods
   async insertKeyValue(uuid: string, key: string, encryptedValue: string) {
     const tableName = this.getTableName('key_values');
     const { error } = await this.client
@@ -186,6 +187,134 @@ class SupabaseDatabase implements DatabaseInterface {
       .eq('uuid', uuid);
     
     if (error) throw error;
+  }
+
+  // Keychain app methods
+  async insertKeychainApp(appData: any) {
+    const tableName = this.getTableName('keychain_apps');
+    const { data, error } = await this.client
+      .from(tableName)
+      .insert(appData)
+      .select('id, account_id, app_name, active, encrypt_type, encrypt_public_key, created_at, modified_at')
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
+
+  async findKeychainAppByAccountId(accountId: string) {
+    const tableName = this.getTableName('keychain_apps');
+    const { data, error } = await this.client
+      .from(tableName)
+      .select('id, account_id, app_name, active, encrypt_type, encrypt_public_key, created_at, modified_at')
+      .eq('account_id', accountId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  async findKeychainAppWithSecretByAccountId(accountId: string) {
+    const tableName = this.getTableName('keychain_apps');
+    const { data, error } = await this.client
+      .from(tableName)
+      .select('id, account_id, account_secret, app_name, active')
+      .eq('account_id', accountId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  async updateKeychainApp(accountId: string, updateData: any) {
+    const tableName = this.getTableName('keychain_apps');
+    const { data, error } = await this.client
+      .from(tableName)
+      .update(updateData)
+      .eq('account_id', accountId)
+      .select();
+    
+    if (error) throw error;
+    return data;
+  }
+
+  // Public key methods
+  async insertPublicKey(keyData: any) {
+    const tableName = this.getTableName('keychain_app_public_keys');
+    const { data, error } = await this.client
+      .from(tableName)
+      .insert(keyData)
+      .select('id, status, app_id, key_name, key, created_at, modified_at')
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
+
+  async updatePublicKeysStatus(appId: number, currentStatus: string, newStatus: string) {
+    const tableName = this.getTableName('keychain_app_public_keys');
+    const { error } = await this.client
+      .from(tableName)
+      .update({ status: newStatus })
+      .eq('app_id', appId)
+      .eq('status', currentStatus);
+    
+    if (error) throw error;
+  }
+
+  async findPublicKeysByAppId(appId: number, status?: string) {
+    const tableName = this.getTableName('keychain_app_public_keys');
+    let query = this.client
+      .from(tableName)
+      .select('id, status, app_id, key_name, key, created_at, modified_at')
+      .eq('app_id', appId);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Private key methods
+  async upsertPrivateKey(keyData: any) {
+    const tableName = this.getTableName('keychain_app_private_keys');
+    const { error } = await this.client
+      .from(tableName)
+      .upsert(keyData, { 
+        onConflict: 'app_id,retrieval_id',
+        ignoreDuplicates: false 
+      });
+    
+    if (error) throw error;
+  }
+
+  async findPrivateKey(appId: number, retrievalId: string) {
+    const tableName = this.getTableName('keychain_app_private_keys');
+    const { data, error } = await this.client
+      .from(tableName)
+      .select('retrieval_id, private_key, created_at')
+      .eq('app_id', appId)
+      .eq('retrieval_id', retrievalId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  async findPrivateKeysByAppId(appId: number) {
+    const tableName = this.getTableName('keychain_app_private_keys');
+    const { data, error } = await this.client
+      .from(tableName)
+      .select('retrieval_id, created_at, modified_at')
+      .eq('app_id', appId)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async testConnection(): Promise<boolean> {
