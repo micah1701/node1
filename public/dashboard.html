@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Keychain</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4f46e5;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo::before {
+            content: "🔐";
+            font-size: 1.2em;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .user-info {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #4338ca;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #64748b;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        /* Main Content */
+        .main {
+            padding: 2rem 0;
+        }
+
+        .dashboard-header {
+            margin-bottom: 2rem;
+        }
+
+        .dashboard-header h1 {
+            font-size: 2rem;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .dashboard-header p {
+            color: #64748b;
+            font-size: 1.1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .card h3 {
+            color: #1e293b;
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        /* Quick Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4f46e5;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #64748b;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e2e8f0;
+            border-radius: 50%;
+            border-top-color: #4f46e5;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error State */
+        .error-message {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .card-actions {
+                flex-direction: column;
+            }
+
+            .user-menu {
+                flex-direction: column;
+                gap: 0.5rem;
+                align-items: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <nav class="nav container">
+            <a href="/dashboard" class="logo">Keychain Dashboard</a>
+            <div class="user-menu">
+                <div class="user-info">
+                    Welcome, <span id="userEmail">Loading...</span>
+                </div>
+                <button class="btn btn-secondary" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Dashboard Header -->
+            <div class="dashboard-header">
+                <h1>Keychain Management Dashboard</h1>
+                <p>Manage your cryptographic keys and applications securely</p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading">
+                <div class="spinner"></div>
+                Loading dashboard...
+            </div>
+
+            <!-- Error State -->
+            <div id="errorState" class="error-message" style="display: none;">
+                <span id="errorMessage"></span>
+            </div>
+
+            <!-- Dashboard Content -->
+            <div id="dashboardContent" style="display: none;">
+                <!-- Quick Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalApps">0</div>
+                        <div class="stat-label">Total Applications</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="activeKeys">0</div>
+                        <div class="stat-label">Active Keys</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalKeys">0</div>
+                        <div class="stat-label">Total Keys Stored</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="lastActivity">-</div>
+                        <div class="stat-label">Last Activity</div>
+                    </div>
+                </div>
+
+                <!-- Main Dashboard Cards -->
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card-icon">🏢</div>
+                        <h3>Keychain Applications</h3>
+                        <p>Create and manage keychain applications for different clients or projects. Each application provides isolated key storage.</p>
+                        <div class="card-actions">
+                            <button class="btn btn-small" onclick="createApplication()">Create New App</button>
+                            <button class="btn btn-secondary btn-small" onclick="viewApplications()">View All</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">🔑</div>
+                        <h3>Public Keys</h3>
+                        <p>Manage public keys for your applications. Add new keys, rotate existing ones, and maintain key versioning.</p>
+                        <div class="card-actions">
+                            <button class="btn btn-small" onclick="managePublicKeys()">Manage Keys</button>
+                            <button class="btn btn-secondary btn-small" onclick="addPublicKey()">Add New Key</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">🔐</div>
+                        <h3>Private Keys</h3>
+                        <p>Securely store and retrieve encrypted private keys. All keys are encrypted with military-grade encryption.</p>
+                        <div class="card-actions">
+                            <button class="btn btn-small" onclick="storePrivateKey()">Store Key</button>
+                            <button class="btn btn-secondary btn-small" onclick="retrievePrivateKey()">Retrieve Key</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">📊</div>
+                        <h3>API Documentation</h3>
+                        <p>Access comprehensive API documentation and integration guides for developers.</p>
+                        <div class="card-actions">
+                            <a href="/api/health" class="btn btn-small">API Status</a>
+                            <button class="btn btn-secondary btn-small" onclick="viewDocs()">View Docs</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">🛡️</div>
+                        <h3>Security Settings</h3>
+                        <p>Configure security settings, manage access controls, and review audit logs for compliance.</p>
+                        <div class="card-actions">
+                            <button class="btn btn-small" onclick="securitySettings()">Settings</button>
+                            <button class="btn btn-secondary btn-small" onclick="auditLogs()">Audit Logs</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">⚙️</div>
+                        <h3>System Health</h3>
+                        <p>Monitor system performance, database connectivity, and overall application health status.</p>
+                        <div class="card-actions">
+                            <button class="btn btn-small" onclick="checkHealth()">Check Status</button>
+                            <button class="btn btn-secondary btn-small" onclick="systemMetrics()">View Metrics</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Authentication check
+        function checkAuth() {
+            const token = localStorage.getItem('keychain_token');
+            if (!token) {
+                window.location.href = '/';
+                return false;
+            }
+            return token;
+        }
+
+        // Load user profile
+        async function loadUserProfile() {
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch('/api/auth/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('userEmail').textContent = data.data.email;
+                } else {
+                    throw new Error('Failed to load profile');
+                }
+            } catch (error) {
+                console.error('Profile load error:', error);
+                logout();
+            }
+        }
+
+        // Load dashboard data
+        async function loadDashboard() {
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                // Simulate loading dashboard data
+                // In a real implementation, you would fetch actual statistics
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Update stats (placeholder data)
+                document.getElementById('totalApps').textContent = '3';
+                document.getElementById('activeKeys').textContent = '12';
+                document.getElementById('totalKeys').textContent = '28';
+                document.getElementById('lastActivity').textContent = 'Today';
+
+                // Show dashboard content
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('dashboardContent').style.display = 'block';
+
+            } catch (error) {
+                console.error('Dashboard load error:', error);
+                showError('Failed to load dashboard data');
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorState').style.display = 'block';
+        }
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('keychain_token');
+            localStorage.removeItem('keychain_refresh_token');
+            window.location.href = '/';
+        }
+
+        // Dashboard action functions (placeholders for future implementation)
+        function createApplication() {
+            alert('Create Application feature coming soon!');
+        }
+
+        function viewApplications() {
+            alert('View Applications feature coming soon!');
+        }
+
+        function managePublicKeys() {
+            alert('Manage Public Keys feature coming soon!');
+        }
+
+        function addPublicKey() {
+            alert('Add Public Key feature coming soon!');
+        }
+
+        function storePrivateKey() {
+            alert('Store Private Key feature coming soon!');
+        }
+
+        function retrievePrivateKey() {
+            alert('Retrieve Private Key feature coming soon!');
+        }
+
+        function viewDocs() {
+            // Open API documentation in new tab
+            window.open('/api/health', '_blank');
+        }
+
+        function securitySettings() {
+            alert('Security Settings feature coming soon!');
+        }
+
+        function auditLogs() {
+            alert('Audit Logs feature coming soon!');
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                alert(`System Status: ${data.status}\nDatabase: ${data.database}\nTimestamp: ${data.timestamp}`);
+            } catch (error) {
+                alert('Failed to check system health');
+            }
+        }
+
+        function systemMetrics() {
+            alert('System Metrics feature coming soon!');
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadUserProfile();
+            await loadDashboard();
+        });
+
+        // Handle token refresh
+        async function refreshToken() {
+            const refreshToken = localStorage.getItem('keychain_refresh_token');
+            if (!refreshToken) {
+                logout();
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/refresh-token', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${refreshToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('keychain_token', data.data.accessToken);
+                } else {
+                    logout();
+                }
+            } catch (error) {
+                console.error('Token refresh error:', error);
+                logout();
+            }
+        }
+
+        // Auto-refresh token every 30 minutes
+        setInterval(refreshToken, 30 * 60 * 1000);
+    </script>
+</body>
+</html>
