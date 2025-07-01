@@ -190,10 +190,10 @@ class SupabaseDatabase implements DatabaseInterface {
 
   async testConnection(): Promise<boolean> {
     try {
-      // Try a simple query to test the connection
+      // Try a simple query to test the connection using a user-defined table
       const { error } = await this.client
-        .from('information_schema.tables')
-        .select('table_name')
+        .from(this.getTableName('users'))
+        .select('id')
         .limit(1);
       
       // If we get here without an error, connection is working
