@@ -329,6 +329,17 @@
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
 
+        .form-group .static-text {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 1rem;
+            background: #f9fafb;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+
         .form-submit {
             width: 100%;
             background: #4f46e5;
@@ -564,12 +575,13 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="editEncryptType">At-Rest Encryption Method</label>
-                    <select id="editEncryptType" name="encrypt_type">
-                        <option value="default">Default (common encryption key)</option>
-                        <option value="passphrase">Passphrase (Must be provided with each retrieval)</option>
-                        <option value="public_key">Public Key (retrieved value remains encrypted)</option>
-                    </select>
+                    <label for="editEncryptTypeDisplay">At-Rest Encryption Method</label>
+                    <div id="editEncryptTypeDisplay" class="static-text">
+                        <!-- Will be populated with current encrypt_type -->
+                    </div>
+                    <small style="color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem; display: block;">
+                        Encryption method cannot be changed after application creation for security reasons.
+                    </small>
                 </div>
                 <button type="submit" class="form-submit" id="editAppSubmitBtn">
                     <span id="editAppSubmitText">Update Application</span>
@@ -743,6 +755,15 @@
             return new Date(dateString).toLocaleDateString();
         }
 
+        function formatEncryptType(encryptType) {
+            const typeMap = {
+                'default': 'Default (common encryption key)',
+                'passphrase': 'Passphrase (Must be provided with each retrieval)',
+                'public_key': 'Public Key (retrieved value remains encrypted)'
+            };
+            return typeMap[encryptType] || encryptType;
+        }
+
         // Modal functions
         function openCreateAppModal() {
             document.getElementById('createAppModal').classList.add('active');
@@ -773,7 +794,9 @@
                     document.getElementById('editAccountId').value = appData.account_id;
                     document.getElementById('editAppName').value = appData.app_name;
                     document.getElementById('editActive').value = appData.active.toString();
-                    document.getElementById('editEncryptType').value = appData.encrypt_type;
+                    
+                    // Display encrypt_type as static text
+                    document.getElementById('editEncryptTypeDisplay').textContent = formatEncryptType(appData.encrypt_type);
                     
                     document.getElementById('editAppModal').classList.add('active');
                 } else {
@@ -923,8 +946,8 @@
             const formData = new FormData(event.target);
             const updateData = {
                 app_name: formData.get('app_name'),
-                active: formData.get('active') === 'true',
-                encrypt_type: formData.get('encrypt_type')
+                active: formData.get('active') === 'true'
+                // Note: encrypt_type is intentionally removed
             };
 
             const token = checkAuth();

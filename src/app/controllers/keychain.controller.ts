@@ -209,11 +209,12 @@ export const getKeychainApp = async (req: Request, res: Response, next: NextFunc
 
 /**
  * Update keychain application (user must have owner or admin access)
+ * Note: encrypt_type cannot be modified after creation for security reasons
  */
 export const updateKeychainApp = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { account_id } = req.params;
-    const { app_name, active, encrypt_type, encrypt_public_key } = req.body as UpdateKeychainAppRequest;
+    const { app_name, active, encrypt_public_key } = req.body as UpdateKeychainAppRequest;
 
     if (!account_id) {
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID is required');
@@ -223,11 +224,10 @@ export const updateKeychainApp = async (req: Request, res: Response, next: NextF
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
     }
 
-    // Build update data
+    // Build update data (explicitly exclude encrypt_type)
     const updateData: any = {};
     if (app_name !== undefined) updateData.app_name = app_name;
     if (active !== undefined) updateData.active = active;
-    if (encrypt_type !== undefined) updateData.encrypt_type = encrypt_type;
     if (encrypt_public_key !== undefined) updateData.encrypt_public_key = encrypt_public_key;
 
     if (Object.keys(updateData).length === 0) {

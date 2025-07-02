@@ -41,7 +41,7 @@ export interface CreateKeychainAppRequest {
 export interface UpdateKeychainAppRequest {
   app_name?: string;
   active?: boolean;
-  encrypt_type?: 'default' | 'passphrase' | 'public_key';
+  // Note: encrypt_type is intentionally removed - cannot be modified after creation
   encrypt_public_key?: number;
 }
 
