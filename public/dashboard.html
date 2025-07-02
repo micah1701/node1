@@ -79,6 +79,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             display: inline-block;
+            font-size: 0.875rem;
         }
 
         .btn:hover {
@@ -94,6 +95,27 @@
             background: #475569;
         }
 
+        .btn-success {
+            background: #10b981;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-small {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
         /* Main Content */
         .main {
             padding: 2rem 0;
@@ -101,6 +123,9 @@
 
         .dashboard-header {
             margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .dashboard-header h1 {
@@ -114,86 +139,252 @@
             font-size: 1.1rem;
         }
 
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
+        /* Apps Section */
+        .apps-section {
             margin-bottom: 3rem;
         }
 
-        .card {
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+            color: #1e293b;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .app-card {
             background: white;
             border-radius: 12px;
-            padding: 2rem;
+            padding: 1.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             border: 1px solid #e2e8f0;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .card:hover {
+        .app-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .card-icon {
-            font-size: 2.5rem;
+        .app-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
             margin-bottom: 1rem;
         }
 
-        .card h3 {
-            color: #1e293b;
+        .app-name {
             font-size: 1.25rem;
-            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.25rem;
         }
 
-        .card p {
+        .app-id {
+            font-size: 0.875rem;
             color: #64748b;
-            margin-bottom: 1.5rem;
+            font-family: 'Courier New', monospace;
         }
 
-        .card-actions {
+        .app-status {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .app-status.active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .app-status.inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .app-meta {
+            margin-bottom: 1rem;
+        }
+
+        .app-meta-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .app-meta-label {
+            color: #64748b;
+        }
+
+        .app-meta-value {
+            color: #1e293b;
+            font-weight: 500;
+        }
+
+        .app-actions {
             display: flex;
             gap: 0.5rem;
             flex-wrap: wrap;
         }
 
-        .btn-small {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.875rem;
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
         }
 
-        /* Quick Stats */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 3rem;
+        .modal.active {
+            display: flex;
         }
 
-        .stat-card {
+        .modal-content {
             background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            text-align: center;
-            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
         }
 
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #4f46e5;
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .modal h2 {
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
             margin-bottom: 0.5rem;
+            color: #555;
+            font-weight: 500;
         }
 
-        .stat-label {
-            color: #64748b;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .form-submit {
+            width: 100%;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .form-submit:hover {
+            background: #4338ca;
+        }
+
+        .form-submit:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .success-message {
+            background: #dcfce7;
+            color: #166534;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         /* Loading State */
-        .loading {
+        .loading-state {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -201,7 +392,7 @@
             color: #64748b;
         }
 
-        .spinner {
+        .loading-state .spinner {
             display: inline-block;
             width: 20px;
             height: 20px;
@@ -212,31 +403,37 @@
             margin-right: 0.5rem;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
         }
 
-        /* Error State */
-        .error-message {
-            background: #fee2e2;
-            color: #dc2626;
-            padding: 1rem;
-            border-radius: 6px;
+        .empty-state-icon {
+            font-size: 3rem;
             margin-bottom: 1rem;
-            text-align: center;
         }
 
         /* Responsive */
         @media (max-width: 768px) {
-            .dashboard-grid {
+            .dashboard-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .apps-grid {
                 grid-template-columns: 1fr;
             }
 
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .card-actions {
+            .app-actions {
                 flex-direction: column;
             }
 
@@ -267,12 +464,14 @@
         <div class="container">
             <!-- Dashboard Header -->
             <div class="dashboard-header">
-                <h1>Keychain Management Dashboard</h1>
-                <p>Manage your cryptographic keys and applications securely</p>
+                <div>
+                    <h1>Keychain Management Dashboard</h1>
+                    <p>Manage your cryptographic keys and applications securely</p>
+                </div>
             </div>
 
             <!-- Loading State -->
-            <div id="loadingState" class="loading">
+            <div id="loadingState" class="loading-state">
                 <div class="spinner"></div>
                 Loading dashboard...
             </div>
@@ -284,93 +483,105 @@
 
             <!-- Dashboard Content -->
             <div id="dashboardContent" style="display: none;">
-                <!-- Quick Stats -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-number" id="totalApps">0</div>
-                        <div class="stat-label">Total Applications</div>
+                <!-- Apps Section -->
+                <div class="apps-section">
+                    <div class="section-header">
+                        <h2>Your Keychain Applications</h2>
+                        <button class="btn btn-success" onclick="openCreateAppModal()">
+                            Create New App
+                        </button>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="activeKeys">0</div>
-                        <div class="stat-label">Active Keys</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="totalKeys">0</div>
-                        <div class="stat-label">Total Keys Stored</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="lastActivity">-</div>
-                        <div class="stat-label">Last Activity</div>
-                    </div>
-                </div>
-
-                <!-- Main Dashboard Cards -->
-                <div class="dashboard-grid">
-                    <div class="card">
-                        <div class="card-icon">🏢</div>
-                        <h3>Keychain Applications</h3>
-                        <p>Create and manage keychain applications for different clients or projects. Each application provides isolated key storage.</p>
-                        <div class="card-actions">
-                            <button class="btn btn-small" onclick="createApplication()">Create New App</button>
-                            <button class="btn btn-secondary btn-small" onclick="viewApplications()">View All</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-icon">🔑</div>
-                        <h3>Public Keys</h3>
-                        <p>Manage public keys for your applications. Add new keys, rotate existing ones, and maintain key versioning.</p>
-                        <div class="card-actions">
-                            <button class="btn btn-small" onclick="managePublicKeys()">Manage Keys</button>
-                            <button class="btn btn-secondary btn-small" onclick="addPublicKey()">Add New Key</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-icon">🔐</div>
-                        <h3>Private Keys</h3>
-                        <p>Securely store and retrieve encrypted private keys. All keys are encrypted with military-grade encryption.</p>
-                        <div class="card-actions">
-                            <button class="btn btn-small" onclick="storePrivateKey()">Store Key</button>
-                            <button class="btn btn-secondary btn-small" onclick="retrievePrivateKey()">Retrieve Key</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-icon">📊</div>
-                        <h3>API Documentation</h3>
-                        <p>Access comprehensive API documentation and integration guides for developers.</p>
-                        <div class="card-actions">
-                            <a href="/api/health" class="btn btn-small">API Status</a>
-                            <button class="btn btn-secondary btn-small" onclick="viewDocs()">View Docs</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-icon">🛡️</div>
-                        <h3>Security Settings</h3>
-                        <p>Configure security settings, manage access controls, and review audit logs for compliance.</p>
-                        <div class="card-actions">
-                            <button class="btn btn-small" onclick="securitySettings()">Settings</button>
-                            <button class="btn btn-secondary btn-small" onclick="auditLogs()">Audit Logs</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-icon">⚙️</div>
-                        <h3>System Health</h3>
-                        <p>Monitor system performance, database connectivity, and overall application health status.</p>
-                        <div class="card-actions">
-                            <button class="btn btn-small" onclick="checkHealth()">Check Status</button>
-                            <button class="btn btn-secondary btn-small" onclick="systemMetrics()">View Metrics</button>
-                        </div>
+                    
+                    <div id="appsContainer">
+                        <!-- Apps will be loaded here -->
                     </div>
                 </div>
             </div>
         </div>
     </main>
 
+    <!-- Create App Modal -->
+    <div id="createAppModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeCreateAppModal()">&times;</button>
+            <h2>Create New Keychain Application</h2>
+            <div id="createAppError" class="error-message" style="display: none;"></div>
+            <div id="createAppSuccess" class="success-message" style="display: none;"></div>
+            <form id="createAppForm" onsubmit="handleCreateApp(event)">
+                <div class="form-group">
+                    <label for="createAccountId">Account ID</label>
+                    <input type="text" id="createAccountId" name="account_id" required 
+                           placeholder="e.g., myapp_001">
+                </div>
+                <div class="form-group">
+                    <label for="createAccountSecret">Account Secret</label>
+                    <input type="password" id="createAccountSecret" name="account_secret" required 
+                           placeholder="Secure password for this application">
+                </div>
+                <div class="form-group">
+                    <label for="createAppName">Application Name</label>
+                    <input type="text" id="createAppName" name="app_name" required 
+                           placeholder="e.g., My Application">
+                </div>
+                <div class="form-group">
+                    <label for="createEncryptType">Encryption Type</label>
+                    <select id="createEncryptType" name="encrypt_type">
+                        <option value="default">Default</option>
+                        <option value="passphrase">Passphrase</option>
+                        <option value="public_key">Public Key</option>
+                    </select>
+                </div>
+                <button type="submit" class="form-submit" id="createAppSubmitBtn">
+                    <span id="createAppSubmitText">Create Application</span>
+                    <span id="createAppSubmitLoading" class="loading" style="display: none;"></span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit App Modal -->
+    <div id="editAppModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeEditAppModal()">&times;</button>
+            <h2>Edit Keychain Application</h2>
+            <div id="editAppError" class="error-message" style="display: none;"></div>
+            <div id="editAppSuccess" class="success-message" style="display: none;"></div>
+            <form id="editAppForm" onsubmit="handleEditApp(event)">
+                <div class="form-group">
+                    <label for="editAccountId">Account ID</label>
+                    <input type="text" id="editAccountId" name="account_id" readonly 
+                           style="background: #f3f4f6; cursor: not-allowed;">
+                </div>
+                <div class="form-group">
+                    <label for="editAppName">Application Name</label>
+                    <input type="text" id="editAppName" name="app_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="editActive">Status</label>
+                    <select id="editActive" name="active">
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editEncryptType">Encryption Type</label>
+                    <select id="editEncryptType" name="encrypt_type">
+                        <option value="default">Default</option>
+                        <option value="passphrase">Passphrase</option>
+                        <option value="public_key">Public Key</option>
+                    </select>
+                </div>
+                <button type="submit" class="form-submit" id="editAppSubmitBtn">
+                    <span id="editAppSubmitText">Update Application</span>
+                    <span id="editAppSubmitLoading" class="loading" style="display: none;"></span>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <script>
+        let currentEditingApp = null;
+
         // Authentication check
         function checkAuth() {
             const token = localStorage.getItem('keychain_token');
@@ -405,21 +616,104 @@
             }
         }
 
+        // Load user's keychain applications
+        async function loadUserApps() {
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch('/api/keychain/apps', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    displayApps(data.data);
+                } else {
+                    throw new Error('Failed to load applications');
+                }
+            } catch (error) {
+                console.error('Apps load error:', error);
+                showError('Failed to load applications');
+            }
+        }
+
+        // Display apps in the grid
+        function displayApps(apps) {
+            const container = document.getElementById('appsContainer');
+            
+            if (apps.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🏢</div>
+                        <h3>No Applications Yet</h3>
+                        <p>Create your first keychain application to get started.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="apps-grid">
+                    ${apps.map(app => {
+                        // Handle both MySQL and Supabase response formats
+                        const appData = app.keychain_apps || app;
+                        const role = app.role || 'owner';
+                        
+                        return `
+                            <div class="app-card">
+                                <div class="app-card-header">
+                                    <div>
+                                        <div class="app-name">${escapeHtml(appData.app_name)}</div>
+                                        <div class="app-id">${escapeHtml(appData.account_id)}</div>
+                                    </div>
+                                    <span class="app-status ${appData.active ? 'active' : 'inactive'}">
+                                        ${appData.active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+                                <div class="app-meta">
+                                    <div class="app-meta-item">
+                                        <span class="app-meta-label">Role:</span>
+                                        <span class="app-meta-value">${escapeHtml(role)}</span>
+                                    </div>
+                                    <div class="app-meta-item">
+                                        <span class="app-meta-label">Encryption:</span>
+                                        <span class="app-meta-value">${escapeHtml(appData.encrypt_type)}</span>
+                                    </div>
+                                    <div class="app-meta-item">
+                                        <span class="app-meta-label">Created:</span>
+                                        <span class="app-meta-value">${formatDate(appData.created_at)}</span>
+                                    </div>
+                                </div>
+                                <div class="app-actions">
+                                    ${['owner', 'admin'].includes(role) ? `
+                                        <button class="btn btn-small" onclick="openEditAppModal('${appData.account_id}')">
+                                            Edit
+                                        </button>
+                                    ` : ''}
+                                    <button class="btn btn-secondary btn-small" onclick="manageKeys('${appData.account_id}')">
+                                        Manage Keys
+                                    </button>
+                                    <button class="btn btn-secondary btn-small" onclick="viewDetails('${appData.account_id}')">
+                                        View Details
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
         // Load dashboard data
         async function loadDashboard() {
             const token = checkAuth();
             if (!token) return;
 
             try {
-                // Simulate loading dashboard data
-                // In a real implementation, you would fetch actual statistics
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                // Update stats (placeholder data)
-                document.getElementById('totalApps').textContent = '3';
-                document.getElementById('activeKeys').textContent = '12';
-                document.getElementById('totalKeys').textContent = '28';
-                document.getElementById('lastActivity').textContent = 'Today';
+                await loadUserApps();
 
                 // Show dashboard content
                 document.getElementById('loadingState').style.display = 'none';
@@ -438,63 +732,247 @@
             document.getElementById('errorState').style.display = 'block';
         }
 
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString();
+        }
+
+        // Modal functions
+        function openCreateAppModal() {
+            document.getElementById('createAppModal').classList.add('active');
+            document.getElementById('createAccountId').focus();
+        }
+
+        function closeCreateAppModal() {
+            document.getElementById('createAppModal').classList.remove('active');
+            clearCreateAppForm();
+        }
+
+        function openEditAppModal(accountId) {
+            // Find the app data
+            const token = checkAuth();
+            if (!token) return;
+
+            fetch(`/api/keychain/apps/${accountId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const appData = data.data.keychain_apps || data.data;
+                    currentEditingApp = accountId;
+                    
+                    document.getElementById('editAccountId').value = appData.account_id;
+                    document.getElementById('editAppName').value = appData.app_name;
+                    document.getElementById('editActive').value = appData.active.toString();
+                    document.getElementById('editEncryptType').value = appData.encrypt_type;
+                    
+                    document.getElementById('editAppModal').classList.add('active');
+                } else {
+                    alert('Failed to load application details');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading app details:', error);
+                alert('Failed to load application details');
+            });
+        }
+
+        function closeEditAppModal() {
+            document.getElementById('editAppModal').classList.remove('active');
+            clearEditAppForm();
+            currentEditingApp = null;
+        }
+
+        // Close modals when clicking outside
+        document.getElementById('createAppModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCreateAppModal();
+            }
+        });
+
+        document.getElementById('editAppModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEditAppModal();
+            }
+        });
+
+        // Form handling
+        function clearCreateAppForm() {
+            document.getElementById('createAppForm').reset();
+            document.getElementById('createAppError').style.display = 'none';
+            document.getElementById('createAppSuccess').style.display = 'none';
+        }
+
+        function clearEditAppForm() {
+            document.getElementById('editAppForm').reset();
+            document.getElementById('editAppError').style.display = 'none';
+            document.getElementById('editAppSuccess').style.display = 'none';
+        }
+
+        function setCreateAppLoading(loading) {
+            const submitBtn = document.getElementById('createAppSubmitBtn');
+            const submitText = document.getElementById('createAppSubmitText');
+            const submitLoading = document.getElementById('createAppSubmitLoading');
+            
+            submitBtn.disabled = loading;
+            submitText.style.display = loading ? 'none' : 'inline';
+            submitLoading.style.display = loading ? 'inline-block' : 'none';
+        }
+
+        function setEditAppLoading(loading) {
+            const submitBtn = document.getElementById('editAppSubmitBtn');
+            const submitText = document.getElementById('editAppSubmitText');
+            const submitLoading = document.getElementById('editAppSubmitLoading');
+            
+            submitBtn.disabled = loading;
+            submitText.style.display = loading ? 'none' : 'inline';
+            submitLoading.style.display = loading ? 'inline-block' : 'none';
+        }
+
+        function showCreateAppError(message) {
+            const errorDiv = document.getElementById('createAppError');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('createAppSuccess').style.display = 'none';
+        }
+
+        function showCreateAppSuccess(message) {
+            const successDiv = document.getElementById('createAppSuccess');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('createAppError').style.display = 'none';
+        }
+
+        function showEditAppError(message) {
+            const errorDiv = document.getElementById('editAppError');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('editAppSuccess').style.display = 'none';
+        }
+
+        function showEditAppSuccess(message) {
+            const successDiv = document.getElementById('editAppSuccess');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('editAppError').style.display = 'none';
+        }
+
+        // Create app form handler
+        async function handleCreateApp(event) {
+            event.preventDefault();
+            setCreateAppLoading(true);
+            document.getElementById('createAppError').style.display = 'none';
+            document.getElementById('createAppSuccess').style.display = 'none';
+
+            const formData = new FormData(event.target);
+            const appData = {
+                account_id: formData.get('account_id'),
+                account_secret: formData.get('account_secret'),
+                app_name: formData.get('app_name'),
+                encrypt_type: formData.get('encrypt_type')
+            };
+
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch('/api/keychain/apps', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(appData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showCreateAppSuccess('Application created successfully!');
+                    setTimeout(() => {
+                        closeCreateAppModal();
+                        loadUserApps(); // Refresh the apps list
+                    }, 1500);
+                } else {
+                    showCreateAppError(data.error || 'Failed to create application');
+                }
+            } catch (error) {
+                console.error('Create app error:', error);
+                showCreateAppError('Network error. Please try again.');
+            } finally {
+                setCreateAppLoading(false);
+            }
+        }
+
+        // Edit app form handler
+        async function handleEditApp(event) {
+            event.preventDefault();
+            setEditAppLoading(true);
+            document.getElementById('editAppError').style.display = 'none';
+            document.getElementById('editAppSuccess').style.display = 'none';
+
+            const formData = new FormData(event.target);
+            const updateData = {
+                app_name: formData.get('app_name'),
+                active: formData.get('active') === 'true',
+                encrypt_type: formData.get('encrypt_type')
+            };
+
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch(`/api/keychain/apps/${currentEditingApp}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(updateData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showEditAppSuccess('Application updated successfully!');
+                    setTimeout(() => {
+                        closeEditAppModal();
+                        loadUserApps(); // Refresh the apps list
+                    }, 1500);
+                } else {
+                    showEditAppError(data.error || 'Failed to update application');
+                }
+            } catch (error) {
+                console.error('Edit app error:', error);
+                showEditAppError('Network error. Please try again.');
+            } finally {
+                setEditAppLoading(false);
+            }
+        }
+
+        // App action functions
+        function manageKeys(accountId) {
+            alert(`Key management for ${accountId} coming soon!`);
+        }
+
+        function viewDetails(accountId) {
+            alert(`Detailed view for ${accountId} coming soon!`);
+        }
+
         // Logout function
         function logout() {
             localStorage.removeItem('keychain_token');
             localStorage.removeItem('keychain_refresh_token');
             window.location.href = '/';
-        }
-
-        // Dashboard action functions (placeholders for future implementation)
-        function createApplication() {
-            alert('Create Application feature coming soon!');
-        }
-
-        function viewApplications() {
-            alert('View Applications feature coming soon!');
-        }
-
-        function managePublicKeys() {
-            alert('Manage Public Keys feature coming soon!');
-        }
-
-        function addPublicKey() {
-            alert('Add Public Key feature coming soon!');
-        }
-
-        function storePrivateKey() {
-            alert('Store Private Key feature coming soon!');
-        }
-
-        function retrievePrivateKey() {
-            alert('Retrieve Private Key feature coming soon!');
-        }
-
-        function viewDocs() {
-            // Open API documentation in new tab
-            window.open('/api/health', '_blank');
-        }
-
-        function securitySettings() {
-            alert('Security Settings feature coming soon!');
-        }
-
-        function auditLogs() {
-            alert('Audit Logs feature coming soon!');
-        }
-
-        async function checkHealth() {
-            try {
-                const response = await fetch('/api/health');
-                const data = await response.json();
-                alert(`System Status: ${data.status}\nDatabase: ${data.database}\nTimestamp: ${data.timestamp}`);
-            } catch (error) {
-                alert('Failed to check system health');
-            }
-        }
-
-        function systemMetrics() {
-            alert('System Metrics feature coming soon!');
         }
 
         // Initialize dashboard
@@ -533,6 +1011,14 @@
 
         // Auto-refresh token every 30 minutes
         setInterval(refreshToken, 30 * 60 * 1000);
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeCreateAppModal();
+                closeEditAppModal();
+            }
+        });
     </script>
 </body>
 </html>
