@@ -15,7 +15,7 @@ This framework is designed with a modular architecture that separates core funct
 - **Utilities** - Logging, JWT handling, database connections
 
 ### Application Layer (`src/app/`)
-- **Controllers** - Application-specific business logic
+- **Controllers** - Application-specific business logic (Keychain Management)
 - **Routes** - Custom API endpoints for your application
 - **Middlewares** - App-specific middleware functions
 - **Types** - Application-specific TypeScript interfaces
@@ -33,6 +33,8 @@ This framework is designed with a modular architecture that separates core funct
 - 🗄️ Multi-database support (MySQL/PostgreSQL)
 - 📊 Dynamic table prefixing for multi-tenancy
 - 🏗️ Extensible framework architecture
+- 👥 User-based access control for applications
+- 🔐 Secure keychain management system
 
 ## Getting Started
 
@@ -86,6 +88,11 @@ This framework is designed with a modular architecture that separates core funct
    npm run dev
    ```
 
+7. Access the application:
+   - **Landing Page**: http://localhost:3000
+   - **Dashboard**: http://localhost:3000/dashboard (requires login)
+   - **API Health**: http://localhost:3000/api/health
+
 ## Core API Endpoints
 
 ### Authentication
@@ -99,9 +106,37 @@ This framework is designed with a modular architecture that separates core funct
 - `GET /api/key-values/:uuid` - Retrieve key-value pair (protected)
 - `PUT /api/key-values/:uuid` - Update key-value pair (protected)
 
+### Keychain Management (Application Layer)
+- `POST /api/keychain/authenticate` - Authenticate keychain application
+- `GET /api/keychain/apps` - Get user's keychain applications (protected)
+- `POST /api/keychain/apps` - Create keychain application (protected)
+- `GET /api/keychain/apps/:account_id` - Get specific application (protected)
+- `PUT /api/keychain/apps/:account_id` - Update application (protected)
+- `POST /api/keychain/apps/:account_id/public-keys` - Add public key (protected)
+- `GET /api/keychain/apps/:account_id/public-keys` - Get public keys (protected)
+- `POST /api/keychain/apps/:account_id/private-keys` - Store private key (protected)
+- `GET /api/keychain/apps/:account_id/private-keys/:retrieval_id` - Get private key (protected)
+- `GET /api/keychain/apps/:account_id/private-keys` - List private keys (protected)
+
 ### System
 - `GET /api/health` - Health check endpoint
-- `GET /` - Framework information page
+- `GET /` - Landing page with login functionality
+- `GET /dashboard` - Management dashboard (requires authentication)
+
+## Web Interface
+
+### Landing Page (`/`)
+- **Modern Design**: Gradient background with glassmorphism effects
+- **Feature Overview**: Highlights key capabilities of the system
+- **Login Modal**: Secure authentication with JWT tokens
+- **Responsive**: Mobile-friendly design
+
+### Dashboard (`/dashboard`)
+- **Application Management**: Create, edit, and manage keychain applications
+- **User Access Control**: Role-based permissions (owner, admin, viewer)
+- **Encryption Options**: Support for default, passphrase, and public key encryption
+- **Real-time Updates**: Dynamic loading and updates without page refresh
+- **Security Features**: Token-based authentication with auto-refresh
 
 ## Extending the Framework
 
@@ -115,6 +150,7 @@ This framework is designed with a modular architecture that separates core funct
    
    export const getProducts = async (req: Request, res: Response, next: NextFunction) => {
      // Your application logic here
+     // Access authenticated user via req.user
    };
    ```
 
@@ -154,6 +190,12 @@ import { HttpStatus } from '../../core/types';
 const tableName = db.getTableName('my_table');
 const result = await db.execute(`SELECT * FROM ${tableName}`);
 
+// Access authenticated user
+export const myController = async (req: Request, res: Response, next: NextFunction) => {
+  const userId = req.user?.id; // Available after authenticate middleware
+  // Your logic here
+};
+
 // Use encryption
 import { encryptWithMasterKey, decryptWithMasterKey } from '../../core/utils/encryption';
 const encrypted = encryptWithMasterKey('sensitive data');
@@ -171,13 +213,16 @@ src/
 │   ├── scripts/         # Database setup scripts
 │   ├── types/           # Core TypeScript definitions
 │   └── utils/           # Core utilities (db, encryption, jwt, logger)
-├── app/                 # Application-specific code
-│   ├── controllers/     # Your application controllers
-│   ├── routes/          # Your application routes
-│   ├── middlewares/     # Your application middleware
-│   └── types/           # Your application types
+├── app/                 # Application-specific code (Keychain Management)
+│   ├── controllers/     # Keychain management controllers
+│   ├── routes/          # Keychain API routes
+│   ├── types/           # Keychain-specific types
+│   └── README.md        # Keychain application documentation
 ├── routes/              # Route orchestration
-└── index.ts             # Application entry point
+├── index.ts             # Application entry point
+public/                  # Static web interface
+├── index.html          # Landing page
+└── dashboard.html      # Management dashboard
 ```
 
 ## Database Support
@@ -186,11 +231,13 @@ src/
 - Full SQL support with connection pooling
 - Automatic reconnection handling
 - Transaction support
+- Foreign key constraints
 
 ### PostgreSQL (Supabase)
 - Supabase client integration
 - Row Level Security (RLS) ready
 - Real-time subscriptions available
+- Custom database methods for complex operations
 
 ### Table Prefixing
 Configure `TABLE_PREFIX` in your `.env` to support:
@@ -198,14 +245,40 @@ Configure `TABLE_PREFIX` in your `.env` to support:
 - Environment separation
 - Database organization
 
+### Database Schema
+The framework creates the following tables:
+- `users` - User authentication and profiles
+- `key_values` - Encrypted key-value storage
+- `keychain_apps` - Keychain applications
+- `keychain_app_public_keys` - Public key storage with versioning
+- `keychain_app_private_keys` - Encrypted private key storage
+- `user_keychain_apps` - User-application access control
+
 ## Security Features
 
 - **Password Hashing** - bcrypt with configurable salt rounds
 - **JWT Authentication** - Access and refresh token system
 - **Request Validation** - express-validator integration
 - **Encryption** - AES-CBC for data, RSA for key exchange
-- **Security Headers** - Helmet.js integration
+- **Security Headers** - Helmet.js integration with CSP
 - **CORS** - Configurable cross-origin resource sharing
+- **User Access Control** - Role-based permissions for applications
+- **Audit Logging** - Comprehensive logging of all operations
+
+## User Access Control
+
+The framework implements a robust user access control system:
+
+### Roles
+- **Owner** - Full control over the application
+- **Admin** - Can modify application settings and manage keys
+- **Viewer** - Read-only access to application data
+
+### Access Patterns
+- Users can only access applications they have been granted access to
+- All keychain operations require user authentication
+- Role-based permissions control what actions users can perform
+- Applications are isolated between users and user groups
 
 ## Development Scripts
 
@@ -220,7 +293,31 @@ npm run test         # Run tests
 
 ## Environment Variables
 
-See `.env.example` for all available configuration options.
+See `.env.example` for all available configuration options including:
+- Database configuration (MySQL/Supabase)
+- JWT secrets and expiration times
+- Encryption keys
+- Logging levels
+- Server configuration
+
+## Web Interface Features
+
+### Responsive Design
+- Mobile-first approach
+- Adaptive layouts for all screen sizes
+- Touch-friendly interactions
+
+### User Experience
+- Real-time form validation
+- Loading states and progress indicators
+- Error handling with user-friendly messages
+- Auto-save and recovery features
+
+### Security
+- Client-side token management
+- Automatic token refresh
+- Secure form handling
+- XSS protection
 
 ## Contributing
 
@@ -230,8 +327,13 @@ This framework is designed to be extended. When adding core features:
 2. Maintain backward compatibility
 3. Update documentation
 4. Add appropriate tests
+5. Follow the established patterns for database abstraction
 
 For application-specific features, use `src/app/`.
+
+## Example Application: Keychain Management
+
+The framework includes a complete keychain management application as an example of how to build on the core framework. See `src/app/README.md` for detailed documentation of the keychain features.
 
 ## License
 
