@@ -68,6 +68,25 @@ class SupabaseDatabase implements DatabaseInterface {
     return `${config.database.tablePrefix}${tableName}`;
   }
 
+  // Helper method to normalize nested response data
+  private normalizeKeychainAppResponse(data: any): any {
+    if (!data) return data;
+    
+    const keychainAppsTable = this.getTableName('keychain_apps');
+    
+    // If the data has the prefixed table name, normalize it to 'keychain_apps'
+    if (data[keychainAppsTable]) {
+      return {
+        ...data,
+        keychain_apps: data[keychainAppsTable],
+        // Remove the prefixed version to avoid confusion
+        [keychainAppsTable]: undefined
+      };
+    }
+    
+    return data;
+  }
+
   // Core user methods
   async insertUser(userData: any) {
     const tableName = this.getTableName('users');
@@ -261,7 +280,10 @@ class SupabaseDatabase implements DatabaseInterface {
       .eq('user_id', userId);
     
     if (error) throw error;
-    return data || [];
+    
+    // Normalize the response to use consistent key names
+    const normalizedData = (data || []).map(item => this.normalizeKeychainAppResponse(item));
+    return normalizedData;
   }
 
   async findKeychainAppByAccountIdAndUserId(accountId: string, userId: string) {
@@ -288,7 +310,9 @@ class SupabaseDatabase implements DatabaseInterface {
       .single();
     
     if (error && error.code !== 'PGRST116') throw error;
-    return data;
+    
+    // Normalize the response to use consistent key names
+    return this.normalizeKeychainAppResponse(data);
   }
 
   async insertUserKeychainApp(userId: string, keychainAppId: number, role: string = 'owner') {
