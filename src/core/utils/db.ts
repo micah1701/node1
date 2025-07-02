@@ -70,7 +70,6 @@ class SupabaseDatabase implements DatabaseInterface {
 
   // Helper method to normalize nested response data
   private normalizeKeychainAppResponse(data: any): any {
-    console.log("normalizing this data: ", data);
     if (!data) return data;
     
     const keychainAppsTable = this.getTableName('keychain_apps');
