@@ -313,17 +313,27 @@
         }
 
         .form-group input,
-        .form-group select {
+        .form-group select,
+        .form-group textarea {
             width: 100%;
             padding: 0.75rem;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 1rem;
             transition: border-color 0.3s ease;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
         }
 
         .form-group input:focus,
-        .form-group select:focus {
+        .form-group select:focus,
+        .form-group textarea:focus {
             outline: none;
             border-color: #4f46e5;
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
@@ -338,6 +348,17 @@
             background: #f9fafb;
             color: #6b7280;
             cursor: not-allowed;
+        }
+
+        .form-group.hidden {
+            display: none;
+        }
+
+        .form-group small {
+            color: #6b7280;
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+            display: block;
         }
 
         .form-submit {
@@ -536,11 +557,17 @@
                 </div>
                 <div class="form-group">
                     <label for="createEncryptType">At-Rest Encryption Method</label>
-                    <select id="createEncryptType" name="encrypt_type">
+                    <select id="createEncryptType" name="encrypt_type" onchange="handleEncryptTypeChange()">
                         <option value="default">Default (common encryption key)</option>
                         <option value="passphrase">Passphrase (Must be provided with each retrieval)</option>
                         <option value="public_key">Public Key (retrieved value remains encrypted)</option>
                     </select>
+                </div>
+                <div class="form-group hidden" id="publicKeyGroup">
+                    <label for="createPublicKey">Public Key <span style="color: #ef4444;">*</span></label>
+                    <textarea id="createPublicKey" name="public_key" 
+                              placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"></textarea>
+                    <small>Paste your PEM-formatted public key here. This will be used to encrypt stored values.</small>
                 </div>
                 <button type="submit" class="form-submit" id="createAppSubmitBtn">
                     <span id="createAppSubmitText">Create Application</span>
@@ -579,9 +606,7 @@
                     <div id="editEncryptTypeDisplay" class="static-text">
                         <!-- Will be populated with current encrypt_type -->
                     </div>
-                    <small style="color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem; display: block;">
-                        Encryption method cannot be changed after application creation for security reasons.
-                    </small>
+                    <small>Encryption method cannot be changed after application creation for security reasons.</small>
                 </div>
                 <button type="submit" class="form-submit" id="editAppSubmitBtn">
                     <span id="editAppSubmitText">Update Application</span>
@@ -602,6 +627,22 @@
                 return false;
             }
             return token;
+        }
+
+        // Handle encrypt type change in create form
+        function handleEncryptTypeChange() {
+            const encryptType = document.getElementById('createEncryptType').value;
+            const publicKeyGroup = document.getElementById('publicKeyGroup');
+            const publicKeyInput = document.getElementById('createPublicKey');
+            
+            if (encryptType === 'public_key') {
+                publicKeyGroup.classList.remove('hidden');
+                publicKeyInput.required = true;
+            } else {
+                publicKeyGroup.classList.add('hidden');
+                publicKeyInput.required = false;
+                publicKeyInput.value = ''; // Clear the value when hidden
+            }
         }
 
         // Load user profile
@@ -768,6 +809,8 @@
         function openCreateAppModal() {
             document.getElementById('createAppModal').classList.add('active');
             document.getElementById('createAccountId').focus();
+            // Reset the encrypt type change handler
+            handleEncryptTypeChange();
         }
 
         function closeCreateAppModal() {
@@ -856,6 +899,8 @@
             document.getElementById('createAppForm').reset();
             document.getElementById('createAppError').style.display = 'none';
             document.getElementById('createAppSuccess').style.display = 'none';
+            // Reset the public key field visibility
+            handleEncryptTypeChange();
         }
 
         function clearEditAppForm() {
@@ -926,6 +971,17 @@
                 app_name: formData.get('app_name'),
                 encrypt_type: formData.get('encrypt_type')
             };
+
+            // Add public key if encrypt_type is public_key
+            if (appData.encrypt_type === 'public_key') {
+                const publicKey = formData.get('public_key');
+                if (!publicKey || !publicKey.trim()) {
+                    showCreateAppError('Public key is required when using Public Key encryption method');
+                    setCreateAppLoading(false);
+                    return;
+                }
+                appData.public_key = publicKey.trim();
+            }
 
             const token = checkAuth();
             if (!token) return;

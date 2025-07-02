@@ -22,7 +22,7 @@ import {
  */
 export const createKeychainApp = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { account_id, account_secret, app_name, encrypt_type = 'default', encrypt_public_key = null} = req.body as CreateKeychainAppRequest;
+    const { account_id, account_secret, app_name, encrypt_type = 'default', encrypt_public_key = null, public_key } = req.body as CreateKeychainAppRequest & { public_key?: string };
 
     if (!account_id || !account_secret || !app_name) {
       throw new ApiError(HttpStatus.BAD_REQUEST, 'account_id, account_secret, and app_name are required');
@@ -32,6 +32,11 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
     }
 
+    // Validate public key requirement
+    if (encrypt_type === 'public_key' && (!public_key || !public_key.trim())) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, 'public_key is required when encrypt_type is "public_key"');
+    }
+
     // Hash the account secret
     const salt = await bcrypt.genSalt(10);
     const hashedSecret = await bcrypt.hash(account_secret, salt);
@@ -39,6 +44,7 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
       const userKeychainAppsTable = db.getTableName('user_keychain_apps');
+      const publicKeysTable = db.getTableName('keychain_app_public_keys');
       
       const [result] = await db.execute(
         `INSERT INTO ${keychainAppsTable} (account_id, account_secret, app_name, encrypt_type, encrypt_public_key) VALUES (?, ?, ?, ?, ?)`,
@@ -46,22 +52,41 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
       );
 
       const insertResult = result as { insertId: number };
+      const appId = insertResult.insertId;
 
       // Link the user to the keychain app
       await db.execute(
         `INSERT INTO ${userKeychainAppsTable} (user_id, keychain_app_id, role) VALUES (?, ?, 'owner')`,
-        [req.user.id, insertResult.insertId]
+        [req.user.id, appId]
       );
+
+      // If encrypt_type is public_key, add the public key to the public keys table
+      let publicKeyId = null;
+      if (encrypt_type === 'public_key' && public_key) {
+        const [publicKeyResult] = await db.execute(
+          `INSERT INTO ${publicKeysTable} (app_id, key_name, \`key\`, status) VALUES (?, ?, ?, 'active')`,
+          [appId, 'Initial Public Key', public_key, 'active']
+        );
+        
+        const publicKeyInsertResult = publicKeyResult as { insertId: number };
+        publicKeyId = publicKeyInsertResult.insertId;
+
+        // Update the keychain app to reference this public key
+        await db.execute(
+          `UPDATE ${keychainAppsTable} SET encrypt_public_key = ? WHERE id = ?`,
+          [publicKeyId, appId]
+        );
+      }
 
       // Get the created app
       const [apps] = await db.execute(
         `SELECT id, account_id, app_name, active, encrypt_type, encrypt_public_key, created_at, modified_at FROM ${keychainAppsTable} WHERE id = ?`,
-        [insertResult.insertId]
+        [appId]
       ) as [any[], any];
 
       const app = apps[0];
 
-      logger.info(`Keychain app created: ${app_name} (ID: ${app.id}) for user: ${req.user.id}`);
+      logger.info(`Keychain app created: ${app_name} (ID: ${app.id}) for user: ${req.user.id}${publicKeyId ? ` with public key ID: ${publicKeyId}` : ''}`);
 
       const response: ApiResponse<KeychainAppResponse> = {
         success: true,
@@ -81,11 +106,32 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
       };
 
       const app = await (db as any).insertKeychainApp(appData);
+      const appId = app.id;
 
       // Link the user to the keychain app
-      await (db as any).insertUserKeychainApp(req.user.id, app.id, 'owner');
+      await (db as any).insertUserKeychainApp(req.user.id, appId, 'owner');
 
-      logger.info(`Keychain app created: ${app_name} (ID: ${app.id}) for user: ${req.user.id}`);
+      // If encrypt_type is public_key, add the public key to the public keys table
+      let publicKeyId = null;
+      if (encrypt_type === 'public_key' && public_key) {
+        const keyData = {
+          app_id: appId,
+          key_name: 'Initial Public Key',
+          key: public_key,
+          status: 'active'
+        };
+
+        const publicKeyResult = await (db as any).insertPublicKey(keyData);
+        publicKeyId = publicKeyResult.id;
+
+        // Update the keychain app to reference this public key
+        await (db as any).updateKeychainApp(account_id, { encrypt_public_key: publicKeyId });
+        
+        // Update the response data to include the public key reference
+        app.encrypt_public_key = publicKeyId;
+      }
+
+      logger.info(`Keychain app created: ${app_name} (ID: ${app.id}) for user: ${req.user.id}${publicKeyId ? ` with public key ID: ${publicKeyId}` : ''}`);
 
       const response: ApiResponse<KeychainAppResponse> = {
         success: true,
