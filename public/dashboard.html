@@ -788,24 +788,47 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    const appData = data.data.keychain_apps || data.data;
+                    console.log('Raw API response:', data); // Debug log
+                    
+                    // Handle both MySQL and Supabase response formats more carefully
+                    let appData;
+                    if (data.data.keychain_apps) {
+                        // Supabase format: data is nested in keychain_apps
+                        appData = data.data.keychain_apps;
+                    } else {
+                        // MySQL format: data is directly in data
+                        appData = data.data;
+                    }
+                    
+                    console.log('Processed app data:', appData); // Debug log
+                    
+                    // Validate that we have the required fields
+                    if (!appData || typeof appData.account_id === 'undefined') {
+                        throw new Error('Invalid app data structure');
+                    }
+                    
                     currentEditingApp = accountId;
                     
-                    document.getElementById('editAccountId').value = appData.account_id;
-                    document.getElementById('editAppName').value = appData.app_name;
-                    document.getElementById('editActive').value = appData.active.toString();
+                    // Populate form fields with safe defaults
+                    document.getElementById('editAccountId').value = appData.account_id || '';
+                    document.getElementById('editAppName').value = appData.app_name || '';
+                    
+                    // Handle active field with safe boolean conversion
+                    const activeValue = appData.active !== undefined ? Boolean(appData.active) : true;
+                    document.getElementById('editActive').value = activeValue.toString();
                     
                     // Display encrypt_type as static text
-                    document.getElementById('editEncryptTypeDisplay').textContent = formatEncryptType(appData.encrypt_type);
+                    const encryptType = appData.encrypt_type || 'default';
+                    document.getElementById('editEncryptTypeDisplay').textContent = formatEncryptType(encryptType);
                     
                     document.getElementById('editAppModal').classList.add('active');
                 } else {
-                    alert('Failed to load application details');
+                    throw new Error(data.error || 'Failed to load application details');
                 }
             })
             .catch(error => {
                 console.error('Error loading app details:', error);
-                alert('Failed to load application details');
+                alert(`Error loading app details: ${error.message}`);
             });
         }
 
