@@ -80,7 +80,7 @@ class SupabaseDatabase implements DatabaseInterface {
         ...data,
         keychain_apps: data[keychainAppsTable],
         // Remove the prefixed version to avoid confusion
-        [keychainAppsTable]: undefined
+        // [keychainAppsTable]: undefined
       };
     }
     
