@@ -303,8 +303,6 @@ class SupabaseDatabase implements DatabaseInterface {
       throw appError;
     }
     
-    console.log('Found app:', appData);
-    
     // Then, check if the user has access to this app
     const { data: userAppData, error: userAppError } = await this.client
       .from(userKeychainAppsTable)
