@@ -291,29 +291,48 @@ class SupabaseDatabase implements DatabaseInterface {
     const keychainAppsTable = this.getTableName('keychain_apps');
     const userKeychainAppsTable = this.getTableName('user_keychain_apps');
     
-    const { data, error } = await this.client
-      .from(userKeychainAppsTable)
-      .select(`
-        role,
-        ${keychainAppsTable} (
-          id,
-          account_id,
-          app_name,
-          active,
-          encrypt_type,
-          encrypt_public_key,
-          created_at,
-          modified_at
-        )
-      `)
-      .eq('user_id', userId)
-      .eq(`${keychainAppsTable}.account_id`, accountId)
+    console.log(`Looking for app with account_id: ${accountId} and user_id: ${userId}`);
+    
+    // First, find the keychain app by account_id
+    const { data: appData, error: appError } = await this.client
+      .from(keychainAppsTable)
+      .select('id, account_id, app_name, active, encrypt_type, encrypt_public_key, created_at, modified_at')
+      .eq('account_id', accountId)
       .single();
     
-    if (error && error.code !== 'PGRST116') throw error;
+    if (appError) {
+      console.log('App lookup error:', appError);
+      if (appError.code === 'PGRST116') return null; // No app found
+      throw appError;
+    }
     
-    // Normalize the response to use consistent key names
-    return this.normalizeKeychainAppResponse(data);
+    console.log('Found app:', appData);
+    
+    // Then, check if the user has access to this app
+    const { data: userAppData, error: userAppError } = await this.client
+      .from(userKeychainAppsTable)
+      .select('role')
+      .eq('user_id', userId)
+      .eq('keychain_app_id', appData.id)
+      .single();
+    
+    if (userAppError) {
+      console.log('User app access lookup error:', userAppError);
+      if (userAppError.code === 'PGRST116') return null; // User doesn't have access
+      throw userAppError;
+    }
+    
+    console.log('User has access with role:', userAppData.role);
+    
+    // Combine the data in the expected format
+    const combinedData = {
+      role: userAppData.role,
+      keychain_apps: appData
+    };
+    
+    console.log('Combined data:', combinedData);
+    
+    return combinedData;
   }
 
   async insertUserKeychainApp(userId: string, keychainAppId: number, role: string = 'owner') {
