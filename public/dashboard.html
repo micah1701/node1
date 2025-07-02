@@ -527,9 +527,9 @@
                     <label for="createEncryptType">Encryption Type</label>
                     Select how your private key wil be stored at rest
                     <select id="createEncryptType" name="encrypt_type">
-                        <option value="default">Default (Encrypted at rest via a common passphrase)</option>
+                        <option value="default">Default (common encryption key)</option>
                         <option value="passphrase">Passphrase (Must be provided with each retrieval)</option>
-                        <option value="public_key">Public Key (Encrypt with your provided public key; retrieved value remains encrypted)</option>
+                        <option value="public_key">Public Key (retrieved value remains encrypted)</option>
                     </select>
                 </div>
                 <button type="submit" class="form-submit" id="createAppSubmitBtn">
@@ -565,12 +565,11 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="editEncryptType">Encryption Type</label>
-                  Select how your private key wil be stored at rest
+                    <label for="editEncryptType">At-Rest Encryption Method</label>
                     <select id="editEncryptType" name="encrypt_type">
-                        <option value="default">Default (Encrypted at rest via a common passphrase)</option>
+                        <option value="default">Default (common encryption key)</option>
                         <option value="passphrase">Passphrase (Must be provided with each retrieval)</option>
-                        <option value="public_key">Public Key (Encrypt with your provided public key; retrieved value remains encrypted)</option>
+                        <option value="public_key">Public Key (retrieved value remains encrypted)</option>
                     </select>
                 </div>
                 <button type="submit" class="form-submit" id="editAppSubmitBtn">
