@@ -192,7 +192,6 @@ export const getKeychainApp = async (req: Request, res: Response, next: NextFunc
       const app = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
       if (!app) {
-        console.log("account id, user id: ", account_id +", "+req.user.id);
         throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied (findKeychainAppByAccountIdAndUserId)');
       }
 
