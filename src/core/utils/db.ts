@@ -290,8 +290,6 @@ class SupabaseDatabase implements DatabaseInterface {
     const keychainAppsTable = this.getTableName('keychain_apps');
     const userKeychainAppsTable = this.getTableName('user_keychain_apps');
     
-    console.log(`Looking for app with account_id: ${accountId} and user_id: ${userId}`);
-    
     // First, find the keychain app by account_id
     const { data: appData, error: appError } = await this.client
       .from(keychainAppsTable)
