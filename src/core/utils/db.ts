@@ -306,7 +306,7 @@ class SupabaseDatabase implements DatabaseInterface {
           modified_at
         )
       `)
-      //.eq('user_id', userId)
+      .eq('user_id', userId)
       .eq(`${keychainAppsTable}.account_id`, accountId)
       .single();
     
