@@ -28,18 +28,30 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
       throw new ApiError(HttpStatus.BAD_REQUEST, 'account_id, account_secret, and app_name are required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     // Hash the account secret
     const salt = await bcrypt.genSalt(10);
     const hashedSecret = await bcrypt.hash(account_secret, salt);
 
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
+      
       const [result] = await db.execute(
         `INSERT INTO ${keychainAppsTable} (account_id, account_secret, app_name, encrypt_type, encrypt_public_key) VALUES (?, ?, ?, ?, ?)`,
         [account_id, hashedSecret, app_name, encrypt_type, encrypt_public_key]
       );
 
       const insertResult = result as { insertId: number };
+
+      // Link the user to the keychain app
+      await db.execute(
+        `INSERT INTO ${userKeychainAppsTable} (user_id, keychain_app_id, role) VALUES (?, ?, 'owner')`,
+        [req.user.id, insertResult.insertId]
+      );
 
       // Get the created app
       const [apps] = await db.execute(
@@ -49,7 +61,7 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
 
       const app = apps[0];
 
-      logger.info(`Keychain app created: ${app_name} (ID: ${app.id})`);
+      logger.info(`Keychain app created: ${app_name} (ID: ${app.id}) for user: ${req.user.id}`);
 
       const response: ApiResponse<KeychainAppResponse> = {
         success: true,
@@ -70,7 +82,10 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
 
       const app = await (db as any).insertKeychainApp(appData);
 
-      logger.info(`Keychain app created: ${app_name} (ID: ${app.id})`);
+      // Link the user to the keychain app
+      await (db as any).insertUserKeychainApp(req.user.id, app.id, 'owner');
+
+      logger.info(`Keychain app created: ${app_name} (ID: ${app.id}) for user: ${req.user.id}`);
 
       const response: ApiResponse<KeychainAppResponse> = {
         success: true,
@@ -90,7 +105,51 @@ export const createKeychainApp = async (req: Request, res: Response, next: NextF
 };
 
 /**
- * Get keychain application by account ID
+ * Get keychain applications for the authenticated user
+ */
+export const getUserKeychainApps = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
+    if (config.database.type === 'mysql') {
+      const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
+      
+      const [apps] = await db.execute(
+        `SELECT ka.id, ka.account_id, ka.app_name, ka.active, ka.encrypt_type, ka.encrypt_public_key, ka.created_at, ka.modified_at, uka.role
+         FROM ${keychainAppsTable} ka
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE uka.user_id = ?
+         ORDER BY ka.created_at DESC`,
+        [req.user.id]
+      ) as [any[], any];
+
+      const response: ApiResponse<(KeychainAppResponse & { role: string })[]> = {
+        success: true,
+        data: apps
+      };
+
+      res.status(HttpStatus.OK).json(response);
+    } else {
+      // Supabase implementation
+      const apps = await (db as any).findKeychainAppsByUserId(req.user.id);
+
+      const response: ApiResponse<any[]> = {
+        success: true,
+        data: apps
+      };
+
+      res.status(HttpStatus.OK).json(response);
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get keychain application by account ID (user must have access)
  */
 export const getKeychainApp = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -100,20 +159,29 @@ export const getKeychainApp = async (req: Request, res: Response, next: NextFunc
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID is required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
+      
       const [apps] = await db.execute(
-        `SELECT id, account_id, app_name, active, encrypt_type, encrypt_public_key, created_at, modified_at FROM ${keychainAppsTable} WHERE account_id = ?`,
-        [account_id]
+        `SELECT ka.id, ka.account_id, ka.app_name, ka.active, ka.encrypt_type, ka.encrypt_public_key, ka.created_at, ka.modified_at, uka.role
+         FROM ${keychainAppsTable} ka
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE ka.account_id = ? AND uka.user_id = ?`,
+        [account_id, req.user.id]
       ) as [any[], any];
 
       if (apps.length === 0) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found');
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied');
       }
 
       const app = apps[0];
 
-      const response: ApiResponse<KeychainAppResponse> = {
+      const response: ApiResponse<KeychainAppResponse & { role: string }> = {
         success: true,
         data: app
       };
@@ -121,13 +189,13 @@ export const getKeychainApp = async (req: Request, res: Response, next: NextFunc
       res.status(HttpStatus.OK).json(response);
     } else {
       // Supabase implementation
-      const app = await (db as any).findKeychainAppByAccountId(account_id);
+      const app = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
       if (!app) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found');
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied');
       }
 
-      const response: ApiResponse<KeychainAppResponse> = {
+      const response: ApiResponse<any> = {
         success: true,
         data: app
       };
@@ -140,7 +208,7 @@ export const getKeychainApp = async (req: Request, res: Response, next: NextFunc
 };
 
 /**
- * Update keychain application
+ * Update keychain application (user must have owner or admin access)
  */
 export const updateKeychainApp = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -149,6 +217,10 @@ export const updateKeychainApp = async (req: Request, res: Response, next: NextF
 
     if (!account_id) {
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID is required');
+    }
+
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
     }
 
     // Build update data
@@ -164,6 +236,24 @@ export const updateKeychainApp = async (req: Request, res: Response, next: NextF
 
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
+
+      // Check if user has access and appropriate role
+      const [userApps] = await db.execute(
+        `SELECT uka.role FROM ${userKeychainAppsTable} uka
+         JOIN ${keychainAppsTable} ka ON uka.keychain_app_id = ka.id
+         WHERE ka.account_id = ? AND uka.user_id = ?`,
+        [account_id, req.user.id]
+      ) as [any[], any];
+
+      if (userApps.length === 0) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied');
+      }
+
+      const userRole = userApps[0].role;
+      if (!['owner', 'admin'].includes(userRole)) {
+        throw new ApiError(HttpStatus.FORBIDDEN, 'Insufficient permissions to update this application');
+      }
 
       // Build update query dynamically
       const updateFields: string[] = [];
@@ -185,7 +275,7 @@ export const updateKeychainApp = async (req: Request, res: Response, next: NextF
         throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found');
       }
 
-      logger.info(`Keychain app updated: ${account_id}`);
+      logger.info(`Keychain app updated: ${account_id} by user: ${req.user.id}`);
 
       const response: ApiResponse<{ account_id: string }> = {
         success: true,
@@ -196,13 +286,24 @@ export const updateKeychainApp = async (req: Request, res: Response, next: NextF
       res.status(HttpStatus.OK).json(response);
     } else {
       // Supabase implementation
+      // First check user access
+      const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
+
+      if (!userApp) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied');
+      }
+
+      if (!['owner', 'admin'].includes(userApp.role)) {
+        throw new ApiError(HttpStatus.FORBIDDEN, 'Insufficient permissions to update this application');
+      }
+
       const result = await (db as any).updateKeychainApp(account_id, updateData);
 
       if (!result || result.length === 0) {
         throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found');
       }
 
-      logger.info(`Keychain app updated: ${account_id}`);
+      logger.info(`Keychain app updated: ${account_id} by user: ${req.user.id}`);
 
       const response: ApiResponse<{ account_id: string }> = {
         success: true,
@@ -218,7 +319,7 @@ export const updateKeychainApp = async (req: Request, res: Response, next: NextF
 };
 
 /**
- * Add a public key to a keychain application
+ * Add a public key to a keychain application (user must have access)
  */
 export const addPublicKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -229,18 +330,25 @@ export const addPublicKey = async (req: Request, res: Response, next: NextFuncti
       throw new ApiError(HttpStatus.BAD_REQUEST, 'account_id, key_name, and key are required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
       const publicKeysTable = db.getTableName('keychain_app_public_keys');
 
-      // First, get the app ID
+      // First, get the app ID and verify user access
       const [apps] = await db.execute(
-        `SELECT id FROM ${keychainAppsTable} WHERE account_id = ? AND active = TRUE`,
-        [account_id]
+        `SELECT ka.id FROM ${keychainAppsTable} ka
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE ka.account_id = ? AND ka.active = TRUE AND uka.user_id = ?`,
+        [account_id, req.user.id]
       ) as [any[], any];
 
       if (apps.length === 0) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found');
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
       const app_id = apps[0].id;
@@ -267,7 +375,7 @@ export const addPublicKey = async (req: Request, res: Response, next: NextFuncti
 
       const publicKey = publicKeys[0];
 
-      logger.info(`Public key added for app: ${account_id} (Key ID: ${publicKey.id})`);
+      logger.info(`Public key added for app: ${account_id} (Key ID: ${publicKey.id}) by user: ${req.user.id}`);
 
       const response: ApiResponse<PublicKeyResponse> = {
         success: true,
@@ -278,14 +386,14 @@ export const addPublicKey = async (req: Request, res: Response, next: NextFuncti
       res.status(HttpStatus.CREATED).json(response);
     } else {
       // Supabase implementation
-      // First, get the app ID
-      const app = await (db as any).findKeychainAppByAccountId(account_id);
+      // First, verify user access to the app
+      const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
-      if (!app || !app.active) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found');
+      if (!userApp || !userApp.keychain_apps?.active) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = app.id;
+      const app_id = userApp.keychain_apps.id;
 
       // Mark existing active keys as previous
       await (db as any).updatePublicKeysStatus(app_id, 'active', 'previous_key');
@@ -300,7 +408,7 @@ export const addPublicKey = async (req: Request, res: Response, next: NextFuncti
 
       const publicKey = await (db as any).insertPublicKey(keyData);
 
-      logger.info(`Public key added for app: ${account_id} (Key ID: ${publicKey.id})`);
+      logger.info(`Public key added for app: ${account_id} (Key ID: ${publicKey.id}) by user: ${req.user.id}`);
 
       const response: ApiResponse<PublicKeyResponse> = {
         success: true,
@@ -316,7 +424,7 @@ export const addPublicKey = async (req: Request, res: Response, next: NextFuncti
 };
 
 /**
- * Get public keys for a keychain application
+ * Get public keys for a keychain application (user must have access)
  */
 export const getPublicKeys = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -327,18 +435,25 @@ export const getPublicKeys = async (req: Request, res: Response, next: NextFunct
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID is required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
       const publicKeysTable = db.getTableName('keychain_app_public_keys');
 
-      // First, get the app ID
+      // First, get the app ID and verify user access
       const [apps] = await db.execute(
-        `SELECT id FROM ${keychainAppsTable} WHERE account_id = ?`,
-        [account_id]
+        `SELECT ka.id FROM ${keychainAppsTable} ka
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE ka.account_id = ? AND uka.user_id = ?`,
+        [account_id, req.user.id]
       ) as [any[], any];
 
       if (apps.length === 0) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found');
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied');
       }
 
       const app_id = apps[0].id;
@@ -364,14 +479,14 @@ export const getPublicKeys = async (req: Request, res: Response, next: NextFunct
       res.status(HttpStatus.OK).json(response);
     } else {
       // Supabase implementation
-      // First, get the app ID
-      const app = await (db as any).findKeychainAppByAccountId(account_id);
+      // First, verify user access to the app
+      const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
-      if (!app) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found');
+      if (!userApp) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Keychain application not found or access denied');
       }
 
-      const app_id = app.id;
+      const app_id = userApp.keychain_apps.id;
 
       // Get public keys with optional status filter
       const validStatus = status && ['active', 'previous_key', 'deleted'].includes(status as string) ? status as string : undefined;
@@ -390,7 +505,7 @@ export const getPublicKeys = async (req: Request, res: Response, next: NextFunct
 };
 
 /**
- * Store an encrypted private key
+ * Store an encrypted private key (user must have access)
  */
 export const storePrivateKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -401,21 +516,28 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
       throw new ApiError(HttpStatus.BAD_REQUEST, 'account_id, retrieval_id, and private_key are required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     // Encrypt the private key
     const encryptedPrivateKey = encryptWithMasterKey(private_key);
 
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
       const privateKeysTable = db.getTableName('keychain_app_private_keys');
 
-      // First, get the app ID and verify it's active
+      // First, get the app ID and verify user access
       const [apps] = await db.execute(
-        `SELECT id FROM ${keychainAppsTable} WHERE account_id = ? AND active = TRUE`,
-        [account_id]
+        `SELECT ka.id FROM ${keychainAppsTable} ka
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE ka.account_id = ? AND ka.active = TRUE AND uka.user_id = ?`,
+        [account_id, req.user.id]
       ) as [any[], any];
 
       if (apps.length === 0) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found');
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
       const app_id = apps[0].id;
@@ -427,7 +549,7 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
         [app_id, retrieval_id, encryptedPrivateKey]
       );
 
-      logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id}`);
+      logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
 
       const response: ApiResponse<{ retrieval_id: string }> = {
         success: true,
@@ -438,14 +560,14 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
       res.status(HttpStatus.CREATED).json(response);
     } else {
       // Supabase implementation
-      // First, get the app ID and verify it's active
-      const app = await (db as any).findKeychainAppByAccountId(account_id);
+      // First, verify user access to the app
+      const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
-      if (!app || !app.active) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found');
+      if (!userApp || !userApp.keychain_apps?.active) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = app.id;
+      const app_id = userApp.keychain_apps.id;
 
       // Store the encrypted private key (upsert)
       const keyData = {
@@ -456,7 +578,7 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
 
       await (db as any).upsertPrivateKey(keyData);
 
-      logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id}`);
+      logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
 
       const response: ApiResponse<{ retrieval_id: string }> = {
         success: true,
@@ -472,7 +594,7 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
 };
 
 /**
- * Retrieve and decrypt a private key
+ * Retrieve and decrypt a private key (user must have access)
  */
 export const getPrivateKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -482,21 +604,27 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID and retrieval ID are required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
       const privateKeysTable = db.getTableName('keychain_app_private_keys');
 
-      // Get the private key with app verification
+      // Get the private key with app verification and user access check
       const [privateKeys] = await db.execute(
         `SELECT pk.retrieval_id, pk.private_key, pk.created_at 
          FROM ${privateKeysTable} pk
          JOIN ${keychainAppsTable} ka ON pk.app_id = ka.id
-         WHERE ka.account_id = ? AND pk.retrieval_id = ? AND ka.active = TRUE`,
-        [account_id, retrieval_id]
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE ka.account_id = ? AND pk.retrieval_id = ? AND ka.active = TRUE AND uka.user_id = ?`,
+        [account_id, retrieval_id, req.user.id]
       ) as [any[], any];
 
       if (privateKeys.length === 0) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Private key not found');
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Private key not found or access denied');
       }
 
       const privateKeyData = privateKeys[0];
@@ -504,7 +632,7 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
       // Decrypt the private key
       const decryptedPrivateKey = decryptWithMasterKey(privateKeyData.private_key);
 
-      logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id}`);
+      logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
 
       const response: ApiResponse<PrivateKeyResponse> = {
         success: true,
@@ -518,14 +646,14 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
       res.status(HttpStatus.OK).json(response);
     } else {
       // Supabase implementation
-      // First, get the app ID and verify it's active
-      const app = await (db as any).findKeychainAppByAccountId(account_id);
+      // First, verify user access to the app
+      const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
-      if (!app || !app.active) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found');
+      if (!userApp || !userApp.keychain_apps?.active) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = app.id;
+      const app_id = userApp.keychain_apps.id;
 
       // Get the private key
       const privateKeyData = await (db as any).findPrivateKey(app_id, retrieval_id);
@@ -537,7 +665,7 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
       // Decrypt the private key
       const decryptedPrivateKey = decryptWithMasterKey(privateKeyData.private_key);
 
-      logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id}`);
+      logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
 
       const response: ApiResponse<PrivateKeyResponse> = {
         success: true,
@@ -556,7 +684,7 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
 };
 
 /**
- * List all private key retrieval IDs for an app (without the actual keys)
+ * List all private key retrieval IDs for an app (without the actual keys) (user must have access)
  */
 export const listPrivateKeys = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -566,8 +694,13 @@ export const listPrivateKeys = async (req: Request, res: Response, next: NextFun
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID is required');
     }
 
+    if (!req.user) {
+      throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
+    }
+
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
+      const userKeychainAppsTable = db.getTableName('user_keychain_apps');
       const privateKeysTable = db.getTableName('keychain_app_private_keys');
 
       // Get list of retrieval IDs without the actual private keys
@@ -575,9 +708,10 @@ export const listPrivateKeys = async (req: Request, res: Response, next: NextFun
         `SELECT pk.retrieval_id, pk.created_at, pk.modified_at
          FROM ${privateKeysTable} pk
          JOIN ${keychainAppsTable} ka ON pk.app_id = ka.id
-         WHERE ka.account_id = ? AND ka.active = TRUE
+         JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
+         WHERE ka.account_id = ? AND ka.active = TRUE AND uka.user_id = ?
          ORDER BY pk.created_at DESC`,
-        [account_id]
+        [account_id, req.user.id]
       ) as [any[], any];
 
       const response: ApiResponse<Array<{ retrieval_id: string; created_at: Date; modified_at: Date }>> = {
@@ -588,14 +722,14 @@ export const listPrivateKeys = async (req: Request, res: Response, next: NextFun
       res.status(HttpStatus.OK).json(response);
     } else {
       // Supabase implementation
-      // First, get the app ID and verify it's active
-      const app = await (db as any).findKeychainAppByAccountId(account_id);
+      // First, verify user access to the app
+      const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
-      if (!app || !app.active) {
-        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found');
+      if (!userApp || !userApp.keychain_apps?.active) {
+        throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = app.id;
+      const app_id = userApp.keychain_apps.id;
 
       // Get list of retrieval IDs without the actual private keys
       const privateKeys = await (db as any).findPrivateKeysByAppId(app_id);
@@ -613,7 +747,7 @@ export const listPrivateKeys = async (req: Request, res: Response, next: NextFun
 };
 
 /**
- * Authenticate keychain app (verify account_id and account_secret)
+ * Authenticate keychain app (verify account_id and account_secret) - No user authentication required
  */
 export const authenticateKeychainApp = async (req: Request, res: Response, next: NextFunction) => {
   try {

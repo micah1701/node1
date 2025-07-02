@@ -238,6 +238,72 @@ class SupabaseDatabase implements DatabaseInterface {
     return data;
   }
 
+  // User-specific keychain app methods
+  async findKeychainAppsByUserId(userId: string) {
+    const keychainAppsTable = this.getTableName('keychain_apps');
+    const userKeychainAppsTable = this.getTableName('user_keychain_apps');
+    
+    const { data, error } = await this.client
+      .from(userKeychainAppsTable)
+      .select(`
+        role,
+        ${keychainAppsTable} (
+          id,
+          account_id,
+          app_name,
+          active,
+          encrypt_type,
+          encrypt_public_key,
+          created_at,
+          modified_at
+        )
+      `)
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return data || [];
+  }
+
+  async findKeychainAppByAccountIdAndUserId(accountId: string, userId: string) {
+    const keychainAppsTable = this.getTableName('keychain_apps');
+    const userKeychainAppsTable = this.getTableName('user_keychain_apps');
+    
+    const { data, error } = await this.client
+      .from(userKeychainAppsTable)
+      .select(`
+        role,
+        ${keychainAppsTable} (
+          id,
+          account_id,
+          app_name,
+          active,
+          encrypt_type,
+          encrypt_public_key,
+          created_at,
+          modified_at
+        )
+      `)
+      .eq('user_id', userId)
+      .eq(`${keychainAppsTable}.account_id`, accountId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  async insertUserKeychainApp(userId: string, keychainAppId: number, role: string = 'owner') {
+    const tableName = this.getTableName('user_keychain_apps');
+    const { error } = await this.client
+      .from(tableName)
+      .insert({
+        user_id: userId,
+        keychain_app_id: keychainAppId,
+        role
+      });
+    
+    if (error) throw error;
+  }
+
   // Public key methods
   async insertPublicKey(keyData: any) {
     const tableName = this.getTableName('keychain_app_public_keys');

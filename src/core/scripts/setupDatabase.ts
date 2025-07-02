@@ -78,6 +78,21 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `;
 
+const createUserKeychainAppsTableMySQL = (tableName: string) => `
+CREATE TABLE IF NOT EXISTS ${tableName} (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  keychain_app_id INT NOT NULL,
+  role ENUM('owner', 'admin', 'viewer') DEFAULT 'owner',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_user_app (user_id, keychain_app_id),
+  INDEX idx_user_id (user_id),
+  INDEX idx_keychain_app_id (keychain_app_id),
+  INDEX idx_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
 // PostgreSQL table creation queries
 const createUsersTablePostgreSQL = (tableName: string) => `
 CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -205,6 +220,34 @@ CREATE TRIGGER update_${tableName}_modified_at
     EXECUTE FUNCTION update_modified_at_column();
 `;
 
+const createUserKeychainAppsTablePostgreSQL = (tableName: string) => `
+DO $$ BEGIN
+    CREATE TYPE user_app_role_enum AS ENUM ('owner', 'admin', 'viewer');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+CREATE TABLE IF NOT EXISTS ${tableName} (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  keychain_app_id INTEGER NOT NULL,
+  role user_app_role_enum DEFAULT 'owner',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_user_app_${tableName} UNIQUE (user_id, keychain_app_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_${tableName}_user_id ON ${tableName} (user_id);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_keychain_app_id ON ${tableName} (keychain_app_id);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_role ON ${tableName} (role);
+
+DROP TRIGGER IF EXISTS update_${tableName}_modified_at ON ${tableName};
+CREATE TRIGGER update_${tableName}_modified_at
+    BEFORE UPDATE ON ${tableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_at_column();
+`;
+
 async function setupMySQLDatabase() {
   try {
     const connection = await mysql.createConnection({
@@ -235,6 +278,10 @@ async function setupMySQLDatabase() {
 
     await connection.execute(createKeychainAppPrivateKeysTableMySQL(`${tablePrefix}keychain_app_private_keys`));
     logger.info('Keychain app private keys table created successfully');
+
+    // Create user-keychain apps lookup table
+    await connection.execute(createUserKeychainAppsTableMySQL(`${tablePrefix}user_keychain_apps`));
+    logger.info('User keychain apps lookup table created successfully');
 
     // Add foreign key constraints
     await connection.execute(`
@@ -267,6 +314,27 @@ async function setupMySQLDatabase() {
       logger.info('Foreign key constraint for encrypt public key already exists or failed to create');
     });
 
+    // Add foreign key constraints for user-keychain apps lookup table
+    await connection.execute(`
+      ALTER TABLE ${tablePrefix}user_keychain_apps 
+      ADD CONSTRAINT fk_user_keychain_apps_user_id 
+      FOREIGN KEY (user_id) REFERENCES ${tablePrefix}users(id) 
+      ON DELETE CASCADE;
+    `).catch(() => {
+      // Constraint might already exist
+      logger.info('Foreign key constraint for user_keychain_apps user_id already exists or failed to create');
+    });
+
+    await connection.execute(`
+      ALTER TABLE ${tablePrefix}user_keychain_apps 
+      ADD CONSTRAINT fk_user_keychain_apps_keychain_app_id 
+      FOREIGN KEY (keychain_app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
+      ON DELETE CASCADE;
+    `).catch(() => {
+      // Constraint might already exist
+      logger.info('Foreign key constraint for user_keychain_apps keychain_app_id already exists or failed to create');
+    });
+
     await connection.end();
     logger.info('MySQL database setup completed');
   } catch (error) {
@@ -283,7 +351,8 @@ function generateSupabaseSQL() {
     createKeyValuesTablePostgreSQL(`${tablePrefix}key_values`),
     createKeychainAppsTablePostgreSQL(`${tablePrefix}keychain_apps`),
     createKeychainAppPublicKeysTablePostgreSQL(`${tablePrefix}keychain_app_public_keys`),
-    createKeychainAppPrivateKeysTablePostgreSQL(`${tablePrefix}keychain_app_private_keys`)
+    createKeychainAppPrivateKeysTablePostgreSQL(`${tablePrefix}keychain_app_private_keys`),
+    createUserKeychainAppsTablePostgreSQL(`${tablePrefix}user_keychain_apps`)
   ];
 
   const constraintQueries = [
@@ -300,7 +369,17 @@ function generateSupabaseSQL() {
     `ALTER TABLE ${tablePrefix}keychain_apps 
      ADD CONSTRAINT fk_apps_encrypt_public_key 
      FOREIGN KEY (encrypt_public_key) REFERENCES ${tablePrefix}keychain_app_public_keys(id) 
-     ON DELETE SET NULL;`
+     ON DELETE SET NULL;`,
+
+    `ALTER TABLE ${tablePrefix}user_keychain_apps 
+     ADD CONSTRAINT fk_user_keychain_apps_user_id 
+     FOREIGN KEY (user_id) REFERENCES ${tablePrefix}users(id) 
+     ON DELETE CASCADE;`,
+
+    `ALTER TABLE ${tablePrefix}user_keychain_apps 
+     ADD CONSTRAINT fk_user_keychain_apps_keychain_app_id 
+     FOREIGN KEY (keychain_app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
+     ON DELETE CASCADE;`
   ];
 
   return [...allQueries, ...constraintQueries].join('\n\n');

@@ -65,6 +65,13 @@ router.post(
   keychainController.createKeychainApp
 );
 
+// Get all apps for the authenticated user
+router.get(
+  '/apps',
+  authenticate,
+  keychainController.getUserKeychainApps
+);
+
 router.get(
   '/apps/:account_id',
   authenticate,
