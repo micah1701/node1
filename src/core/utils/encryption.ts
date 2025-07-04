@@ -57,6 +57,42 @@ export const decryptWithMasterKey = (encryptedData: string): string => {
 };
 
 /**
+ * Encrypts data using a passphrase
+ */
+export const encryptWithPassphrase = (data: string, passphrase: string): string => {
+  const iv = generateIV();
+  const key = deriveKey(passphrase, iv);
+  
+  const cipher = forge.cipher.createCipher('AES-CBC', key);
+  cipher.start({ iv });
+  cipher.update(forge.util.createBuffer(data, 'utf8'));
+  cipher.finish();
+
+  const encrypted = cipher.output.getBytes();
+  const combined = iv + encrypted;
+  
+  return forge.util.encode64(combined);
+};
+
+/**
+ * Decrypts data using a passphrase
+ */
+export const decryptWithPassphrase = (encryptedData: string, passphrase: string): string => {
+  const combined = forge.util.decode64(encryptedData);
+  const iv = combined.substring(0, 16);
+  const encrypted = combined.substring(16);
+  
+  const key = deriveKey(passphrase, iv);
+  
+  const decipher = forge.cipher.createDecipher('AES-CBC', key);
+  decipher.start({ iv });
+  decipher.update(forge.util.createBuffer(encrypted));
+  decipher.finish();
+  
+  return decipher.output.toString();
+};
+
+/**
  * Generates a new RSA key pair
  */
 export const generateKeyPair = (): { publicKey: string; privateKey: string } => {

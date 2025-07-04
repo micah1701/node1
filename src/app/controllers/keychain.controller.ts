@@ -3,7 +3,14 @@ import bcrypt from 'bcryptjs';
 import { ApiError } from '../../core/middlewares/error.middleware';
 import { HttpStatus, ApiResponse } from '../../core/types';
 import { db } from '../../core/utils/db';
-import { encryptWithMasterKey, decryptWithMasterKey } from '../../core/utils/encryption';
+import { 
+  encryptWithMasterKey, 
+  decryptWithMasterKey, 
+  encryptWithPassphrase, 
+  decryptWithPassphrase,
+  encryptWithPublicKey,
+  decryptWithPrivateKey
+} from '../../core/utils/encryption';
 import { logger } from '../../core/utils/logger';
 import { config } from '../../core/config';
 import {
@@ -12,6 +19,7 @@ import {
   CreatePublicKeyRequest,
   UpdatePublicKeyRequest,
   StorePrivateKeyRequest,
+  GetPrivateKeyRequest,
   KeychainAppResponse,
   PublicKeyResponse,
   PrivateKeyResponse
@@ -552,11 +560,12 @@ export const getPublicKeys = async (req: Request, res: Response, next: NextFunct
 
 /**
  * Store an encrypted private key (user must have access)
+ * Encryption method depends on the application's encrypt_type setting
  */
 export const storePrivateKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { account_id } = req.params;
-    const { retrieval_id, private_key } = req.body as StorePrivateKeyRequest;
+    const { retrieval_id, private_key, passphrase } = req.body as StorePrivateKeyRequest;
 
     if (!account_id || !retrieval_id || !private_key) {
       throw new ApiError(HttpStatus.BAD_REQUEST, 'account_id, retrieval_id, and private_key are required');
@@ -566,17 +575,17 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
     }
 
-    // Encrypt the private key
-    const encryptedPrivateKey = encryptWithMasterKey(private_key);
+    // First, get the application details to determine encryption method
+    let appData;
+    let app_id;
 
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
       const userKeychainAppsTable = db.getTableName('user_keychain_apps');
-      const privateKeysTable = db.getTableName('keychain_app_private_keys');
 
-      // First, get the app ID and verify user access
+      // Get the app details and verify user access
       const [apps] = await db.execute(
-        `SELECT ka.id FROM ${keychainAppsTable} ka
+        `SELECT ka.id, ka.encrypt_type, ka.encrypt_public_key FROM ${keychainAppsTable} ka
          JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
          WHERE ka.account_id = ? AND ka.active = TRUE AND uka.user_id = ?`,
         [account_id, req.user.id]
@@ -586,36 +595,79 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
         throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = apps[0].id;
-
-      // Store the encrypted private key
-      await db.execute(
-        `INSERT INTO ${privateKeysTable} (app_id, retrieval_id, private_key) VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE private_key = VALUES(private_key), modified_at = CURRENT_TIMESTAMP`,
-        [app_id, retrieval_id, encryptedPrivateKey]
-      );
-
-      logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
-
-      const response: ApiResponse<{ retrieval_id: string }> = {
-        success: true,
-        data: { retrieval_id },
-        message: 'Private key stored successfully'
-      };
-
-      res.status(HttpStatus.CREATED).json(response);
+      appData = apps[0];
+      app_id = appData.id;
     } else {
       // Supabase implementation
-      // First, verify user access to the app
       const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
       if (!userApp || !userApp.keychain_apps?.active) {
         throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = userApp.keychain_apps.id;
+      appData = userApp.keychain_apps;
+      app_id = appData.id;
+    }
 
-      // Store the encrypted private key (upsert)
+    // Encrypt the private key based on the application's encrypt_type
+    let encryptedPrivateKey: string;
+
+    switch (appData.encrypt_type) {
+      case 'default':
+        // Use master key encryption (existing behavior)
+        encryptedPrivateKey = encryptWithMasterKey(private_key);
+        break;
+
+      case 'passphrase':
+        // Require passphrase for encryption
+        if (!passphrase) {
+          throw new ApiError(HttpStatus.BAD_REQUEST, 'passphrase is required when application encrypt_type is "passphrase"');
+        }
+        encryptedPrivateKey = encryptWithPassphrase(private_key, passphrase);
+        break;
+
+      case 'public_key':
+        // Get the active public key for this application
+        let publicKeyData;
+        
+        if (config.database.type === 'mysql') {
+          const publicKeysTable = db.getTableName('keychain_app_public_keys');
+          const [publicKeys] = await db.execute(
+            `SELECT \`key\` FROM ${publicKeysTable} WHERE app_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+            [app_id]
+          ) as [any[], any];
+
+          if (publicKeys.length === 0) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for this application');
+          }
+          publicKeyData = publicKeys[0];
+        } else {
+          const publicKeys = await (db as any).findPublicKeysByAppId(app_id, 'active');
+          if (publicKeys.length === 0) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for this application');
+          }
+          publicKeyData = publicKeys[0];
+        }
+
+        // Encrypt with the public key
+        encryptedPrivateKey = encryptWithPublicKey(private_key, publicKeyData.key);
+        break;
+
+      default:
+        throw new ApiError(HttpStatus.BAD_REQUEST, `Unsupported encryption type: ${appData.encrypt_type}`);
+    }
+
+    // Store the encrypted private key
+    if (config.database.type === 'mysql') {
+      const privateKeysTable = db.getTableName('keychain_app_private_keys');
+
+      await db.execute(
+        `INSERT INTO ${privateKeysTable} (app_id, retrieval_id, private_key) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE private_key = VALUES(private_key), modified_at = CURRENT_TIMESTAMP`,
+        [app_id, retrieval_id, encryptedPrivateKey]
+      );
+    } else {
+      // Supabase implementation
       const keyData = {
         app_id,
         retrieval_id,
@@ -623,17 +675,17 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
       };
 
       await (db as any).upsertPrivateKey(keyData);
-
-      logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
-
-      const response: ApiResponse<{ retrieval_id: string }> = {
-        success: true,
-        data: { retrieval_id },
-        message: 'Private key stored successfully'
-      };
-
-      res.status(HttpStatus.CREATED).json(response);
     }
+
+    logger.info(`Private key stored for app: ${account_id}, retrieval_id: ${retrieval_id}, encrypt_type: ${appData.encrypt_type} by user: ${req.user.id}`);
+
+    const response: ApiResponse<{ retrieval_id: string }> = {
+      success: true,
+      data: { retrieval_id },
+      message: 'Private key stored successfully'
+    };
+
+    res.status(HttpStatus.CREATED).json(response);
   } catch (error) {
     next(error);
   }
@@ -641,10 +693,12 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
 
 /**
  * Retrieve and decrypt a private key (user must have access)
+ * Decryption method depends on the application's encrypt_type setting
  */
 export const getPrivateKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { account_id, retrieval_id } = req.params;
+    const { passphrase } = req.body as GetPrivateKeyRequest;
 
     if (!account_id || !retrieval_id) {
       throw new ApiError(HttpStatus.BAD_REQUEST, 'Account ID and retrieval ID are required');
@@ -654,6 +708,10 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'User not authenticated');
     }
 
+    // First, get the application details and private key
+    let appData;
+    let privateKeyData;
+
     if (config.database.type === 'mysql') {
       const keychainAppsTable = db.getTableName('keychain_apps');
       const userKeychainAppsTable = db.getTableName('user_keychain_apps');
@@ -661,7 +719,7 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
 
       // Get the private key with app verification and user access check
       const [privateKeys] = await db.execute(
-        `SELECT pk.retrieval_id, pk.private_key, pk.created_at 
+        `SELECT pk.retrieval_id, pk.private_key, pk.created_at, ka.encrypt_type, ka.encrypt_public_key
          FROM ${privateKeysTable} pk
          JOIN ${keychainAppsTable} ka ON pk.app_id = ka.id
          JOIN ${userKeychainAppsTable} uka ON ka.id = uka.keychain_app_id
@@ -673,57 +731,70 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
         throw new ApiError(HttpStatus.NOT_FOUND, 'Private key not found or access denied');
       }
 
-      const privateKeyData = privateKeys[0];
-
-      // Decrypt the private key
-      const decryptedPrivateKey = decryptWithMasterKey(privateKeyData.private_key);
-
-      logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
-
-      const response: ApiResponse<PrivateKeyResponse> = {
-        success: true,
-        data: {
-          retrieval_id: privateKeyData.retrieval_id,
-          private_key: decryptedPrivateKey,
-          created_at: privateKeyData.created_at
-        }
-      };
-
-      res.status(HttpStatus.OK).json(response);
+      privateKeyData = privateKeys[0];
+      appData = { encrypt_type: privateKeyData.encrypt_type, encrypt_public_key: privateKeyData.encrypt_public_key };
     } else {
       // Supabase implementation
-      // First, verify user access to the app
       const userApp = await (db as any).findKeychainAppByAccountIdAndUserId(account_id, req.user.id);
 
       if (!userApp || !userApp.keychain_apps?.active) {
         throw new ApiError(HttpStatus.NOT_FOUND, 'Active keychain application not found or access denied');
       }
 
-      const app_id = userApp.keychain_apps.id;
+      appData = userApp.keychain_apps;
+      const app_id = appData.id;
 
       // Get the private key
-      const privateKeyData = await (db as any).findPrivateKey(app_id, retrieval_id);
+      privateKeyData = await (db as any).findPrivateKey(app_id, retrieval_id);
 
       if (!privateKeyData) {
         throw new ApiError(HttpStatus.NOT_FOUND, 'Private key not found');
       }
-
-      // Decrypt the private key
-      const decryptedPrivateKey = decryptWithMasterKey(privateKeyData.private_key);
-
-      logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id} by user: ${req.user.id}`);
-
-      const response: ApiResponse<PrivateKeyResponse> = {
-        success: true,
-        data: {
-          retrieval_id: privateKeyData.retrieval_id,
-          private_key: decryptedPrivateKey,
-          created_at: privateKeyData.created_at
-        }
-      };
-
-      res.status(HttpStatus.OK).json(response);
     }
+
+    // Decrypt the private key based on the application's encrypt_type
+    let decryptedPrivateKey: string;
+
+    switch (appData.encrypt_type) {
+      case 'default':
+        // Use master key decryption (existing behavior)
+        decryptedPrivateKey = decryptWithMasterKey(privateKeyData.private_key);
+        break;
+
+      case 'passphrase':
+        // Require passphrase for decryption
+        if (!passphrase) {
+          throw new ApiError(HttpStatus.BAD_REQUEST, 'passphrase is required when application encrypt_type is "passphrase"');
+        }
+        try {
+          decryptedPrivateKey = decryptWithPassphrase(privateKeyData.private_key, passphrase);
+        } catch (error) {
+          throw new ApiError(HttpStatus.UNAUTHORIZED, 'Invalid passphrase provided');
+        }
+        break;
+
+      case 'public_key':
+        // For public key encryption, we cannot decrypt the private key server-side
+        // Return the encrypted value as-is for client-side decryption
+        decryptedPrivateKey = privateKeyData.private_key;
+        break;
+
+      default:
+        throw new ApiError(HttpStatus.BAD_REQUEST, `Unsupported encryption type: ${appData.encrypt_type}`);
+    }
+
+    logger.info(`Private key retrieved for app: ${account_id}, retrieval_id: ${retrieval_id}, encrypt_type: ${appData.encrypt_type} by user: ${req.user.id}`);
+
+    const response: ApiResponse<PrivateKeyResponse> = {
+      success: true,
+      data: {
+        retrieval_id: privateKeyData.retrieval_id,
+        private_key: decryptedPrivateKey,
+        created_at: privateKeyData.created_at
+      }
+    };
+
+    res.status(HttpStatus.OK).json(response);
   } catch (error) {
     next(error);
   }

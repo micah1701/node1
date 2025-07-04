@@ -59,6 +59,11 @@ export interface UpdatePublicKeyRequest {
 export interface StorePrivateKeyRequest {
   retrieval_id: string;
   private_key: string;
+  passphrase?: string; // Required when app encrypt_type is 'passphrase'
+}
+
+export interface GetPrivateKeyRequest {
+  passphrase?: string; // Required when app encrypt_type is 'passphrase'
 }
 
 export interface KeychainAppResponse {
