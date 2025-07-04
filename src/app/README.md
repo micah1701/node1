@@ -8,12 +8,12 @@ The Keychain Application is designed to securely store and manage cryptographic 
 
 - **Multi-tenant architecture** - Each application has its own isolated keychain
 - **User-based access control** - Role-based permissions (owner, admin, viewer)
-- **Encrypted storage** - All private keys are encrypted using AES-CBC encryption
-- **Public key versioning** - Support for key rotation with status tracking
 - **Multiple encryption methods** - Default, passphrase, and public key encryption
+- **Public key versioning** - Support for key rotation with status tracking
 - **Secure authentication** - Application-level and user-level authentication
 - **Database flexibility** - Works with both MySQL and PostgreSQL (Supabase)
 - **Web interface** - Complete dashboard for managing applications and keys
+- **Dynamic form handling** - Adaptive UI based on encryption method selection
 
 ## 🏗️ Architecture
 
@@ -28,16 +28,16 @@ The Keychain Application is designed to securely store and manage cryptographic 
 ### Security Features
 
 - **Password Hashing** - bcrypt with salt for application secrets
-- **Data Encryption** - AES-CBC encryption for all private keys
+- **Multiple Encryption Methods** - AES-CBC, RSA, and passphrase-based encryption
 - **Access Control** - User-level and application-level isolation
 - **Key Rotation** - Support for updating keys while maintaining history
 - **Audit Logging** - Complete logging of all key operations
 
 ### Encryption Methods
 
-1. **Default** - Common encryption key managed by the system
-2. **Passphrase** - User must provide passphrase with each retrieval
-3. **Public Key** - Retrieved values remain encrypted with user's public key
+1. **Default** - Common encryption key managed by the system (server-side encryption)
+2. **Passphrase** - User must provide passphrase with each storage/retrieval operation
+3. **Public Key** - Retrieved values remain encrypted with user's public key (end-to-end encryption)
 
 ## 🌐 Web Interface
 
@@ -51,8 +51,9 @@ The Keychain Application is designed to securely store and manage cryptographic 
 - **Application Management** - Create, edit, and manage keychain applications
 - **Role-based UI** - Different actions available based on user permissions
 - **Real-time Updates** - Dynamic loading without page refresh
-- **Encryption Options** - Visual selection of encryption methods
-- **Public Key Input** - Dynamic form fields based on encryption selection
+- **Encryption Options** - Visual selection of encryption methods with dynamic form fields
+- **Public Key Input** - Text area appears when selecting public key encryption method
+- **Validation** - Real-time form validation with user-friendly error messages
 
 ## 📡 API Endpoints
 
@@ -107,7 +108,7 @@ Get all keychain applications the authenticated user has access to.
       "account_id": "string",
       "app_name": "string",
       "active": "boolean",
-      "encrypt_type": "string",
+      "encrypt_type": "default|passphrase|public_key",
       "encrypt_public_key": "number|null",
       "created_at": "datetime",
       "modified_at": "datetime",
@@ -275,13 +276,14 @@ POST /api/keychain/apps/{account_id}/private-keys
 Authorization: Bearer <jwt_token>
 ```
 
-Store an encrypted private key with a unique retrieval ID (user must have access).
+Store an encrypted private key with a unique retrieval ID. Encryption method depends on the application's `encrypt_type` setting.
 
 **Request Body:**
 ```json
 {
   "retrieval_id": "string",
-  "private_key": "string"
+  "private_key": "string",
+  "passphrase": "string (required if app encrypt_type is 'passphrase')"
 }
 ```
 
@@ -298,11 +300,18 @@ Store an encrypted private key with a unique retrieval ID (user must have access
 
 #### Retrieve Private Key
 ```http
-GET /api/keychain/apps/{account_id}/private-keys/{retrieval_id}
+POST /api/keychain/apps/{account_id}/private-keys/{retrieval_id}/retrieve
 Authorization: Bearer <jwt_token>
 ```
 
-Retrieve and decrypt a private key (user must have access).
+Retrieve and decrypt a private key. Decryption method depends on the application's `encrypt_type` setting.
+
+**Request Body:**
+```json
+{
+  "passphrase": "string (required if app encrypt_type is 'passphrase')"
+}
+```
 
 **Response:**
 ```json
@@ -315,6 +324,8 @@ Retrieve and decrypt a private key (user must have access).
   }
 }
 ```
+
+**Note:** For `public_key` encryption type, the `private_key` field contains encrypted data that must be decrypted client-side.
 
 #### List Private Keys
 ```http
@@ -349,7 +360,7 @@ List all private key retrieval IDs (without the actual keys, user must have acce
    - Account Secret: `secure_password_123`
    - Application Name: `My Application`
    - Encryption Method: Select desired method
-   - Public Key: (if using public key encryption)
+   - Public Key: (text area appears if selecting public key encryption)
 4. **Click "Create Application"**
 
 ### 2. Setting Up via API
@@ -371,7 +382,7 @@ curl -X POST http://localhost:3000/api/auth/login \
     "password": "password123"
   }'
 
-# 2. Create a keychain application
+# 2. Create a keychain application with public key encryption
 curl -X POST http://localhost:3000/api/keychain/apps \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -379,19 +390,11 @@ curl -X POST http://localhost:3000/api/keychain/apps \
     "account_id": "myapp_001",
     "account_secret": "secure_password_123",
     "app_name": "My Application",
-    "encrypt_type": "default"
+    "encrypt_type": "public_key",
+    "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
   }'
 
-# 3. Add a public key
-curl -X POST http://localhost:3000/api/keychain/apps/myapp_001/public-keys \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "key_name": "primary_key",
-    "key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-  }'
-
-# 4. Store a private key
+# 3. Store a private key (will be encrypted with the public key)
 curl -X POST http://localhost:3000/api/keychain/apps/myapp_001/private-keys \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -413,25 +416,72 @@ curl -X POST http://localhost:3000/api/keychain/authenticate \
   }'
 ```
 
-### 4. Key Retrieval
+### 4. Key Operations with Different Encryption Methods
 
+#### Default Encryption
 ```bash
-# Get active public keys
-curl -X GET http://localhost:3000/api/keychain/apps/myapp_001/public-keys?status=active \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+# Store private key (default encryption)
+curl -X POST http://localhost:3000/api/keychain/apps/myapp_default/private-keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "retrieval_id": "key_001",
+    "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+  }'
 
-# Retrieve a private key
-curl -X GET http://localhost:3000/api/keychain/apps/myapp_001/private-keys/key_001 \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+# Retrieve private key (default encryption)
+curl -X POST http://localhost:3000/api/keychain/apps/myapp_default/private-keys/key_001/retrieve \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+#### Passphrase Encryption
+```bash
+# Store private key with passphrase
+curl -X POST http://localhost:3000/api/keychain/apps/myapp_passphrase/private-keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "retrieval_id": "key_001",
+    "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    "passphrase": "my-secure-passphrase"
+  }'
+
+# Retrieve private key with passphrase
+curl -X POST http://localhost:3000/api/keychain/apps/myapp_passphrase/private-keys/key_001/retrieve \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "passphrase": "my-secure-passphrase"
+  }'
+```
+
+#### Public Key Encryption
+```bash
+# Store private key (encrypted with app's public key)
+curl -X POST http://localhost:3000/api/keychain/apps/myapp_publickey/private-keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "retrieval_id": "key_001",
+    "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+  }'
+
+# Retrieve private key (returns encrypted data for client-side decryption)
+curl -X POST http://localhost:3000/api/keychain/apps/myapp_publickey/private-keys/key_001/retrieve \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
 ```
 
 ## 🛡️ Security Considerations
 
-### Encryption
-- **Private keys** are encrypted using AES-CBC with PBKDF2 key derivation
-- **Application secrets** are hashed using bcrypt with salt
-- **Master encryption key** must be securely configured in environment variables
-- **Public key encryption** option allows end-to-end encryption
+### Encryption Methods Comparison
+
+| Method | Server Access | Use Case | Security Level |
+|--------|---------------|----------|----------------|
+| **Default** | Server can decrypt | Automated processes, convenience | Good |
+| **Passphrase** | Server cannot decrypt without passphrase | User-controlled encryption | Better |
+| **Public Key** | Server cannot decrypt at all | End-to-end encryption | Best |
 
 ### Access Control
 - **User authentication** required for all management operations
@@ -440,12 +490,13 @@ curl -X GET http://localhost:3000/api/keychain/apps/myapp_001/private-keys/key_0
 - **Inactive applications** cannot store or retrieve keys
 
 ### Best Practices
-1. **Rotate keys regularly** - Use the public key versioning system
-2. **Secure storage** - Keep retrieval IDs secure and unique
-3. **Environment variables** - Never hardcode secrets in your application
-4. **HTTPS only** - Always use HTTPS in production
-5. **Audit logs** - Monitor key access patterns
-6. **Role management** - Grant minimum necessary permissions
+1. **Choose appropriate encryption method** based on your security requirements
+2. **Rotate keys regularly** - Use the public key versioning system
+3. **Secure storage** - Keep retrieval IDs secure and unique
+4. **Environment variables** - Never hardcode secrets in your application
+5. **HTTPS only** - Always use HTTPS in production
+6. **Audit logs** - Monitor key access patterns
+7. **Role management** - Grant minimum necessary permissions
 
 ## 🗄️ Database Schema
 
@@ -514,18 +565,29 @@ class KeychainClient {
     return response.data;
   }
 
-  async storePrivateKey(accountId, retrievalId, privateKey) {
+  async storePrivateKey(accountId, retrievalId, privateKey, passphrase = null) {
+    const data = { retrieval_id: retrievalId, private_key: privateKey };
+    if (passphrase) {
+      data.passphrase = passphrase;
+    }
+
     const response = await axios.post(
       `${this.baseUrl}/api/keychain/apps/${accountId}/private-keys`,
-      { retrieval_id: retrievalId, private_key: privateKey },
+      data,
       { headers: this.headers }
     );
     return response.data;
   }
 
-  async getPrivateKey(accountId, retrievalId) {
-    const response = await axios.get(
-      `${this.baseUrl}/api/keychain/apps/${accountId}/private-keys/${retrievalId}`,
+  async getPrivateKey(accountId, retrievalId, passphrase = null) {
+    const data = {};
+    if (passphrase) {
+      data.passphrase = passphrase;
+    }
+
+    const response = await axios.post(
+      `${this.baseUrl}/api/keychain/apps/${accountId}/private-keys/${retrievalId}/retrieve`,
+      data,
       { headers: this.headers }
     );
     return response.data.data.private_key;
@@ -540,8 +602,8 @@ const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
 
 ### Common Error Codes
 
-- **400 Bad Request** - Invalid request parameters or missing required fields
-- **401 Unauthorized** - Invalid or missing authentication
+- **400 Bad Request** - Invalid request parameters, missing required fields, or missing passphrase
+- **401 Unauthorized** - Invalid or missing authentication, or invalid passphrase
 - **403 Forbidden** - Insufficient permissions for the requested operation
 - **404 Not Found** - Application or key not found, or user doesn't have access
 - **500 Internal Server Error** - Server-side error
@@ -606,7 +668,7 @@ const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
 - **Application secrets** - Secure storage of account credentials
 
 ### Audit Logging
-- All key operations are logged with user information
+- All key operations are logged with user information and encryption method
 - Application access attempts are tracked
 - Failed authentication attempts are recorded
 - Key rotation events are documented
@@ -617,4 +679,4 @@ const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
 
 For issues, questions, or contributions related to the Keychain Application, please refer to the main project documentation or create an issue in the project repository.
 
-The Keychain Application demonstrates the full capabilities of the TypeScript API Framework and serves as a complete example of building secure, multi-tenant applications with user access control.
+The Keychain Application demonstrates the full capabilities of the TypeScript API Framework and serves as a complete example of building secure, multi-tenant applications with user access control and multiple encryption methods.

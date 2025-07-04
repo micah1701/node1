@@ -9,7 +9,7 @@ This framework is designed with a modular architecture that separates core funct
 ### Core Framework (`src/core/`)
 - **Authentication & Authorization** - JWT-based user management
 - **Database Abstraction** - Support for MySQL and PostgreSQL (Supabase)
-- **Encryption** - AES-CBC and RSA encryption utilities
+- **Encryption** - AES-CBC and RSA encryption utilities with multiple encryption methods
 - **Key-Value Storage** - Encrypted data storage system
 - **Middleware** - Error handling, validation, authentication
 - **Utilities** - Logging, JWT handling, database connections
@@ -29,12 +29,13 @@ This framework is designed with a modular architecture that separates core funct
 - 🚦 Flexible middleware architecture
 - 📝 Structured logging with Winston
 - 🔒 Security best practices with Helmet
-- 🔑 AES-CBC and RSA encryption support
+- 🔑 Multiple encryption methods (AES-CBC, RSA, passphrase-based)
 - 🗄️ Multi-database support (MySQL/PostgreSQL)
 - 📊 Dynamic table prefixing for multi-tenancy
 - 🏗️ Extensible framework architecture
 - 👥 User-based access control for applications
-- 🔐 Secure keychain management system
+- 🔐 Secure keychain management system with flexible encryption options
+- 🔄 Public key versioning and rotation support
 
 ## Getting Started
 
@@ -115,7 +116,7 @@ This framework is designed with a modular architecture that separates core funct
 - `POST /api/keychain/apps/:account_id/public-keys` - Add public key (protected)
 - `GET /api/keychain/apps/:account_id/public-keys` - Get public keys (protected)
 - `POST /api/keychain/apps/:account_id/private-keys` - Store private key (protected)
-- `GET /api/keychain/apps/:account_id/private-keys/:retrieval_id` - Get private key (protected)
+- `POST /api/keychain/apps/:account_id/private-keys/:retrieval_id/retrieve` - Get private key (protected)
 - `GET /api/keychain/apps/:account_id/private-keys` - List private keys (protected)
 
 ### System
@@ -134,9 +135,32 @@ This framework is designed with a modular architecture that separates core funct
 ### Dashboard (`/dashboard`)
 - **Application Management**: Create, edit, and manage keychain applications
 - **User Access Control**: Role-based permissions (owner, admin, viewer)
-- **Encryption Options**: Support for default, passphrase, and public key encryption
+- **Multiple Encryption Options**: Support for default, passphrase, and public key encryption
+- **Dynamic Form Fields**: Public key input appears when selecting public key encryption
 - **Real-time Updates**: Dynamic loading and updates without page refresh
 - **Security Features**: Token-based authentication with auto-refresh
+
+## 🔐 Encryption Methods
+
+The framework supports three different encryption methods for private key storage:
+
+### 1. Default Encryption
+- **Description**: Uses the master encryption key from environment variables
+- **Use Case**: Convenient for most applications where server-side encryption is sufficient
+- **Security**: Server can decrypt data (good for automated processes)
+- **Setup**: No additional configuration required
+
+### 2. Passphrase Encryption
+- **Description**: Requires a user-provided passphrase for encryption/decryption
+- **Use Case**: When users want control over their encryption keys
+- **Security**: Server cannot decrypt without the passphrase (higher security)
+- **Setup**: Passphrase must be provided with each store/retrieve operation
+
+### 3. Public Key Encryption
+- **Description**: Uses RSA public key encryption with the application's active public key
+- **Use Case**: End-to-end encryption where server never has access to decrypted data
+- **Security**: Highest security - server cannot decrypt at all
+- **Setup**: Requires providing a public key during application creation or adding one later
 
 ## Extending the Framework
 
@@ -197,8 +221,17 @@ export const myController = async (req: Request, res: Response, next: NextFuncti
 };
 
 // Use encryption
-import { encryptWithMasterKey, decryptWithMasterKey } from '../../core/utils/encryption';
+import { 
+  encryptWithMasterKey, 
+  decryptWithMasterKey,
+  encryptWithPassphrase,
+  decryptWithPassphrase,
+  encryptWithPublicKey,
+  decryptWithPrivateKey
+} from '../../core/utils/encryption';
+
 const encrypted = encryptWithMasterKey('sensitive data');
+const passphraseEncrypted = encryptWithPassphrase('data', 'my-passphrase');
 ```
 
 ## Project Structure
@@ -249,7 +282,7 @@ Configure `TABLE_PREFIX` in your `.env` to support:
 The framework creates the following tables:
 - `users` - User authentication and profiles
 - `key_values` - Encrypted key-value storage
-- `keychain_apps` - Keychain applications
+- `keychain_apps` - Keychain applications with encryption settings
 - `keychain_app_public_keys` - Public key storage with versioning
 - `keychain_app_private_keys` - Encrypted private key storage
 - `user_keychain_apps` - User-application access control
@@ -259,11 +292,12 @@ The framework creates the following tables:
 - **Password Hashing** - bcrypt with configurable salt rounds
 - **JWT Authentication** - Access and refresh token system
 - **Request Validation** - express-validator integration
-- **Encryption** - AES-CBC for data, RSA for key exchange
+- **Multiple Encryption Methods** - AES-CBC, RSA, and passphrase-based encryption
 - **Security Headers** - Helmet.js integration with CSP
 - **CORS** - Configurable cross-origin resource sharing
 - **User Access Control** - Role-based permissions for applications
 - **Audit Logging** - Comprehensive logging of all operations
+- **Key Rotation Support** - Public key versioning with status tracking
 
 ## User Access Control
 
@@ -312,6 +346,7 @@ See `.env.example` for all available configuration options including:
 - Loading states and progress indicators
 - Error handling with user-friendly messages
 - Auto-save and recovery features
+- Dynamic form fields based on encryption method selection
 
 ### Security
 - Client-side token management
