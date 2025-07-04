@@ -432,6 +432,18 @@ class SupabaseDatabase implements DatabaseInterface {
     if (error) throw error;
   }
 
+  async findApiLogByUuid(uuid: string) {
+    const tableName = this.getTableName('api_request_logs');
+    const { data, error } = await this.client
+      .from(tableName)
+      .select('*')
+      .eq('request_uuid', uuid)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
   async testConnection(): Promise<boolean> {
     try {
       // Try a simple query to test the connection using a user-defined table
