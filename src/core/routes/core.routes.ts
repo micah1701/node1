@@ -8,7 +8,12 @@ const router = Router();
 
 // Health check endpoint
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
+  const response = { 
+    status: 'ok', 
+    timestamp: new Date(),
+    requestId: (req as any).requestUuid || 'unknown'
+  };
+  res.json(response);
 });
 
 // Core framework routes

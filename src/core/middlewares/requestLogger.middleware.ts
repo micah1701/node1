@@ -26,8 +26,8 @@ const SENSITIVE_FIELDS = [
   'passphrase',
   'account_secret',
   'private_key',
-  'privateKey'
-  'apisecret'
+  'privateKey',
+  'apisecret',
   'api_secret',
   'secret',
   'token',
@@ -188,6 +188,20 @@ const storeRequestLog = async (logData: {
 };
 
 /**
+ * Adds requestId to JSON response if it's an object
+ */
+const addRequestIdToResponse = (body: any, requestUuid: string): any => {
+  // Only add requestId to object responses (not strings, numbers, etc.)
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    return {
+      ...body,
+      requestId: requestUuid
+    };
+  }
+  return body;
+};
+
+/**
  * Request logging middleware - captures request data
  */
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
@@ -233,22 +247,33 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   let responseBody: any = null;
   let responseCaptured = false;
 
-  // Override res.json to capture response
+  // Override res.json to capture response and add requestId
   res.json = function(body: any) {
     if (!responseCaptured) {
-      responseBody = redactSensitiveData(body);
+      // Add requestId to the response body before logging
+      const bodyWithRequestId = addRequestIdToResponse(body, req.requestUuid!);
+      responseBody = redactSensitiveData(bodyWithRequestId);
       responseCaptured = true;
+      
+      // Send the response with requestId
+      return originalJson.call(this, bodyWithRequestId);
     }
     return originalJson.call(this, body);
   };
 
-  // Override res.send to capture response
+  // Override res.send to capture response and add requestId
   res.send = function(body: any) {
     if (!responseCaptured) {
       try {
-        // Try to parse as JSON, otherwise store as string
-        responseBody = typeof body === 'string' ? JSON.parse(body) : body;
-        responseBody = redactSensitiveData(responseBody);
+        // Try to parse as JSON, add requestId if it's an object, otherwise store as string
+        let parsedBody = typeof body === 'string' ? JSON.parse(body) : body;
+        const bodyWithRequestId = addRequestIdToResponse(parsedBody, req.requestUuid!);
+        responseBody = redactSensitiveData(bodyWithRequestId);
+        
+        // Send the response with requestId if it was modified
+        if (bodyWithRequestId !== parsedBody) {
+          return originalSend.call(this, JSON.stringify(bodyWithRequestId));
+        }
       } catch {
         responseBody = typeof body === 'string' ? body : String(body);
       }
@@ -261,8 +286,14 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   res.end = function(chunk?: any, encoding?: any) {
     if (!responseCaptured && chunk) {
       try {
-        responseBody = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
-        responseBody = redactSensitiveData(responseBody);
+        let parsedChunk = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
+        const chunkWithRequestId = addRequestIdToResponse(parsedChunk, req.requestUuid!);
+        responseBody = redactSensitiveData(chunkWithRequestId);
+        
+        // Send the response with requestId if it was modified
+        if (chunkWithRequestId !== parsedChunk) {
+          return originalEnd.call(this, JSON.stringify(chunkWithRequestId), encoding);
+        }
       } catch {
         responseBody = typeof chunk === 'string' ? chunk : String(chunk);
       }

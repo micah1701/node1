@@ -20,6 +20,7 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+  requestId?: string;
 }
 
 export enum HttpStatus {
