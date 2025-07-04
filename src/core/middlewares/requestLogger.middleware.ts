@@ -306,7 +306,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     
     const logData = {
       requestUuid: req.requestUuid!,
-      userId: req.loggedUserId,
+      userId: req.loggedUserId ?? null,
       method: req.method,
       url: req.originalUrl || req.url,
       statusCode: res.statusCode || 500,
