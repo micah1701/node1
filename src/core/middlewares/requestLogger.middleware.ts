@@ -22,9 +22,12 @@ declare global {
  */
 const SENSITIVE_FIELDS = [
   'password',
+  'api_password',
   'passphrase',
   'account_secret',
   'private_key',
+  'privateKey'
+  'apisecret'
   'api_secret',
   'secret',
   'token',
