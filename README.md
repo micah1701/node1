@@ -11,7 +11,9 @@ This framework is designed with a modular architecture that separates core funct
 - **Database Abstraction** - Support for MySQL and PostgreSQL (Supabase)
 - **Encryption** - AES-CBC and RSA encryption utilities with multiple encryption methods
 - **Key-Value Storage** - Encrypted data storage system
-- **Middleware** - Error handling, validation, authentication
+- **SSH Key Generation** - Generate RSA and Ed25519 SSH key pairs
+- **API Request Logging** - Comprehensive logging of all API requests and responses
+- **Middleware** - Error handling, validation, authentication, request logging
 - **Utilities** - Logging, JWT handling, database connections
 
 ### Application Layer (`src/app/`)
@@ -36,6 +38,8 @@ This framework is designed with a modular architecture that separates core funct
 - 👥 User-based access control for applications
 - 🔐 Secure keychain management system with flexible encryption options
 - 🔄 Public key versioning and rotation support
+- 🔑 SSH key pair generation (RSA2048, RSA4096, Ed25519)
+- 📋 Comprehensive API request logging with encryption
 
 ## Getting Started
 
@@ -107,6 +111,10 @@ This framework is designed with a modular architecture that separates core funct
 - `GET /api/key-values/:uuid` - Retrieve key-value pair (protected)
 - `PUT /api/key-values/:uuid` - Update key-value pair (protected)
 
+### SSH Key Generation
+- `POST /api/ssh-keys/generate/:keyType` - Generate SSH key pair (protected)
+  - Supported key types: `RSA2048`, `RSA4096`, `Ed25519`
+
 ### Keychain Management (Application Layer)
 - `POST /api/keychain/authenticate` - Authenticate keychain application
 - `GET /api/keychain/apps` - Get user's keychain applications (protected)
@@ -123,6 +131,90 @@ This framework is designed with a modular architecture that separates core funct
 - `GET /api/health` - Health check endpoint
 - `GET /` - Landing page with login functionality
 - `GET /dashboard` - Management dashboard (requires authentication)
+
+## 🔑 SSH Key Generation
+
+The framework includes a built-in SSH key generation service that supports multiple key types:
+
+### Supported Key Types
+- **RSA2048** - 2048-bit RSA keys (good balance of security and performance)
+- **RSA4096** - 4096-bit RSA keys (higher security, slower performance)
+- **Ed25519** - Modern elliptic curve keys (recommended for new deployments)
+
+### Usage Example
+
+```bash
+# Generate RSA2048 key pair
+curl -X POST http://localhost:3000/api/ssh-keys/generate/RSA2048 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+
+# Generate Ed25519 key pair
+curl -X POST http://localhost:3000/api/ssh-keys/generate/Ed25519 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+### Response Format
+
+```json
+{
+  "success": true,
+  "data": {
+    "publicKey": "ssh-rsa AAAAB3NzaC1yc2EAAAA...",
+    "privateKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    "keyType": "RSA2048",
+    "fingerprint": "SHA256:..."
+  },
+  "message": "SSH RSA2048 key pair generated successfully"
+}
+```
+
+## 📋 API Request Logging
+
+The framework automatically logs all API requests and responses for audit and monitoring purposes.
+
+### Features
+- **Comprehensive Logging** - Captures method, URL, headers, request/response bodies
+- **Sensitive Data Redaction** - Automatically redacts passwords, tokens, private keys
+- **User Tracking** - Extracts user ID from JWT tokens when available
+- **Encrypted Storage** - All logged data is encrypted using the master encryption key
+- **Performance Metrics** - Tracks response times for performance monitoring
+- **Error Tracking** - Logs errors and exceptions with full context
+
+### Logged Information
+- Request UUID (unique identifier for each request)
+- User ID (extracted from JWT token if present)
+- HTTP method and URL
+- Request/response headers (sensitive data redacted)
+- Request/response bodies (sensitive data redacted)
+- Client IP address and User-Agent
+- Response time in milliseconds
+- HTTP status code
+- Error messages (if any)
+
+### Sensitive Data Redaction
+The following fields are automatically redacted from logs:
+- `password`, `passphrase`, `account_secret`
+- `private_key`, `api_secret`, `secret`
+- `token`, `authorization`, `cookie`
+- `x-api-key` and other sensitive headers
+
+### Database Schema
+The `api_request_logs` table stores:
+- `request_uuid` - Unique identifier for the request
+- `user_id` - User ID (if authenticated)
+- `method` - HTTP method
+- `url` - Request URL
+- `status_code` - HTTP response status
+- `encrypted_headers` - Encrypted request headers
+- `encrypted_request_body` - Encrypted request body
+- `encrypted_response_body` - Encrypted response body
+- `ip_address` - Client IP address
+- `user_agent` - Client User-Agent string
+- `response_time_ms` - Response time in milliseconds
+- `error_message` - Error message (if any)
+- `created_at` - Timestamp
 
 ## Web Interface
 
@@ -227,11 +319,13 @@ import {
   encryptWithPassphrase,
   decryptWithPassphrase,
   encryptWithPublicKey,
-  decryptWithPrivateKey
+  decryptWithPrivateKey,
+  generateSSHKeyPair
 } from '../../core/utils/encryption';
 
 const encrypted = encryptWithMasterKey('sensitive data');
 const passphraseEncrypted = encryptWithPassphrase('data', 'my-passphrase');
+const sshKeys = generateSSHKeyPair('RSA2048');
 ```
 
 ## Project Structure
@@ -240,7 +334,7 @@ const passphraseEncrypted = encryptWithPassphrase('data', 'my-passphrase');
 src/
 ├── core/                 # Core framework functionality
 │   ├── config/          # Configuration management
-│   ├── controllers/     # Core controllers (auth, key-value)
+│   ├── controllers/     # Core controllers (auth, key-value, ssh-keys)
 │   ├── middlewares/     # Core middleware functions
 │   ├── routes/          # Core API routes
 │   ├── scripts/         # Database setup scripts
@@ -286,6 +380,7 @@ The framework creates the following tables:
 - `keychain_app_public_keys` - Public key storage with versioning
 - `keychain_app_private_keys` - Encrypted private key storage
 - `user_keychain_apps` - User-application access control
+- `api_request_logs` - Encrypted API request and response logs
 
 ## Security Features
 
@@ -298,6 +393,8 @@ The framework creates the following tables:
 - **User Access Control** - Role-based permissions for applications
 - **Audit Logging** - Comprehensive logging of all operations
 - **Key Rotation Support** - Public key versioning with status tracking
+- **Sensitive Data Redaction** - Automatic redaction in logs
+- **Encrypted Log Storage** - All logs encrypted with master key
 
 ## User Access Control
 

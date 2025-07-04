@@ -14,6 +14,8 @@ The Keychain Application is designed to securely store and manage cryptographic 
 - **Database flexibility** - Works with both MySQL and PostgreSQL (Supabase)
 - **Web interface** - Complete dashboard for managing applications and keys
 - **Dynamic form handling** - Adaptive UI based on encryption method selection
+- **SSH key generation** - Built-in SSH key pair generation service
+- **Comprehensive logging** - All API requests and responses are logged and encrypted
 
 ## 🏗️ Architecture
 
@@ -24,6 +26,8 @@ The Keychain Application is designed to securely store and manage cryptographic 
 - **Public Keys** - Versioned public keys with status tracking (active/previous/deleted)
 - **Private Keys** - Encrypted private keys with unique retrieval IDs
 - **Authentication** - Dual-layer authentication (user + application)
+- **SSH Key Generation** - Generate RSA and Ed25519 SSH key pairs
+- **API Request Logging** - Comprehensive audit trail of all operations
 
 ### Security Features
 
@@ -31,7 +35,8 @@ The Keychain Application is designed to securely store and manage cryptographic 
 - **Multiple Encryption Methods** - AES-CBC, RSA, and passphrase-based encryption
 - **Access Control** - User-level and application-level isolation
 - **Key Rotation** - Support for updating keys while maintaining history
-- **Audit Logging** - Complete logging of all key operations
+- **Audit Logging** - Complete logging of all key operations with encryption
+- **Sensitive Data Redaction** - Automatic redaction of sensitive information in logs
 
 ### Encryption Methods
 
@@ -85,6 +90,40 @@ Authenticate a keychain application using account credentials (no user auth requ
   "message": "Authentication successful"
 }
 ```
+
+---
+
+### SSH Key Generation
+
+#### Generate SSH Key Pair
+```http
+POST /api/ssh-keys/generate/{keyType}
+Authorization: Bearer <jwt_token>
+```
+
+Generate an SSH key pair of the specified type.
+
+**Path Parameters:**
+- `keyType`: One of `RSA2048`, `RSA4096`, or `Ed25519`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "publicKey": "ssh-rsa AAAAB3NzaC1yc2EAAAA...",
+    "privateKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    "keyType": "RSA2048",
+    "fingerprint": "SHA256:..."
+  },
+  "message": "SSH RSA2048 key pair generated successfully"
+}
+```
+
+**Supported Key Types:**
+- **RSA2048** - 2048-bit RSA keys (good balance of security and performance)
+- **RSA4096** - 4096-bit RSA keys (higher security, slower performance)
+- **Ed25519** - Modern elliptic curve keys (recommended for new deployments)
 
 ---
 
@@ -351,7 +390,26 @@ List all private key retrieval IDs (without the actual keys, user must have acce
 
 ## 🔧 Usage Examples
 
-### 1. Setting Up a New Application via Web Interface
+### 1. Generate SSH Keys
+
+```bash
+# Generate RSA2048 key pair
+curl -X POST http://localhost:3000/api/ssh-keys/generate/RSA2048 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+
+# Generate Ed25519 key pair
+curl -X POST http://localhost:3000/api/ssh-keys/generate/Ed25519 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+
+# Generate RSA4096 key pair
+curl -X POST http://localhost:3000/api/ssh-keys/generate/RSA4096 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+### 2. Setting Up a New Application via Web Interface
 
 1. **Login** to the dashboard at `/dashboard`
 2. **Click "Create New App"** button
@@ -363,7 +421,7 @@ List all private key retrieval IDs (without the actual keys, user must have acce
    - Public Key: (text area appears if selecting public key encryption)
 4. **Click "Create Application"**
 
-### 2. Setting Up via API
+### 3. Setting Up via API
 
 ```bash
 # 1. Register and login to get JWT token
@@ -382,7 +440,12 @@ curl -X POST http://localhost:3000/api/auth/login \
     "password": "password123"
   }'
 
-# 2. Create a keychain application with public key encryption
+# 2. Generate SSH keys for the application
+curl -X POST http://localhost:3000/api/ssh-keys/generate/RSA2048 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+
+# 3. Create a keychain application with public key encryption
 curl -X POST http://localhost:3000/api/keychain/apps \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -394,7 +457,7 @@ curl -X POST http://localhost:3000/api/keychain/apps \
     "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
   }'
 
-# 3. Store a private key (will be encrypted with the public key)
+# 4. Store a private key (will be encrypted with the public key)
 curl -X POST http://localhost:3000/api/keychain/apps/myapp_001/private-keys \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -404,7 +467,7 @@ curl -X POST http://localhost:3000/api/keychain/apps/myapp_001/private-keys \
   }'
 ```
 
-### 3. Application Authentication (for external apps)
+### 4. Application Authentication (for external apps)
 
 ```bash
 # Authenticate your application
@@ -416,7 +479,7 @@ curl -X POST http://localhost:3000/api/keychain/authenticate \
   }'
 ```
 
-### 4. Key Operations with Different Encryption Methods
+### 5. Key Operations with Different Encryption Methods
 
 #### Default Encryption
 ```bash
@@ -483,6 +546,18 @@ curl -X POST http://localhost:3000/api/keychain/apps/myapp_publickey/private-key
 | **Passphrase** | Server cannot decrypt without passphrase | User-controlled encryption | Better |
 | **Public Key** | Server cannot decrypt at all | End-to-end encryption | Best |
 
+### SSH Key Security
+- **Key Type Selection** - Ed25519 recommended for new deployments
+- **Key Storage** - Store generated keys securely
+- **Key Rotation** - Regularly generate new SSH keys
+- **Access Control** - Only authenticated users can generate keys
+
+### API Request Logging
+- **Comprehensive Audit Trail** - All API requests and responses are logged
+- **Sensitive Data Protection** - Passwords, tokens, and private keys are automatically redacted
+- **Encrypted Storage** - All log data is encrypted using the master encryption key
+- **User Tracking** - User IDs are extracted from JWT tokens for accountability
+
 ### Access Control
 - **User authentication** required for all management operations
 - **Role-based permissions** control what users can do
@@ -491,12 +566,13 @@ curl -X POST http://localhost:3000/api/keychain/apps/myapp_publickey/private-key
 
 ### Best Practices
 1. **Choose appropriate encryption method** based on your security requirements
-2. **Rotate keys regularly** - Use the public key versioning system
-3. **Secure storage** - Keep retrieval IDs secure and unique
-4. **Environment variables** - Never hardcode secrets in your application
-5. **HTTPS only** - Always use HTTPS in production
-6. **Audit logs** - Monitor key access patterns
-7. **Role management** - Grant minimum necessary permissions
+2. **Use Ed25519 keys** for new SSH deployments when possible
+3. **Rotate keys regularly** - Use the public key versioning system
+4. **Secure storage** - Keep retrieval IDs secure and unique
+5. **Environment variables** - Never hardcode secrets in your application
+6. **HTTPS only** - Always use HTTPS in production
+7. **Monitor logs** - Review API request logs for suspicious activity
+8. **Role management** - Grant minimum necessary permissions
 
 ## 🗄️ Database Schema
 
@@ -528,6 +604,22 @@ curl -X POST http://localhost:3000/api/keychain/apps/myapp_publickey/private-key
 - `retrieval_id` - Unique identifier for key retrieval
 - `private_key` - Encrypted private key content
 
+### api_request_logs
+- `id` - Primary key
+- `request_uuid` - Unique identifier for each request
+- `user_id` - Foreign key to users table (nullable)
+- `method` - HTTP method
+- `url` - Request URL
+- `status_code` - HTTP response status
+- `encrypted_headers` - Encrypted request headers
+- `encrypted_request_body` - Encrypted request body
+- `encrypted_response_body` - Encrypted response body
+- `ip_address` - Client IP address
+- `user_agent` - Client User-Agent string
+- `response_time_ms` - Response time in milliseconds
+- `error_message` - Error message (if any)
+- `created_at` - Timestamp
+
 ## 🚀 Integration Guide
 
 ### Node.js Example
@@ -542,6 +634,15 @@ class KeychainClient {
       'Authorization': `Bearer ${jwtToken}`,
       'Content-Type': 'application/json'
     };
+  }
+
+  async generateSSHKeys(keyType = 'RSA2048') {
+    const response = await axios.post(
+      `${this.baseUrl}/api/ssh-keys/generate/${keyType}`,
+      {},
+      { headers: this.headers }
+    );
+    return response.data.data;
   }
 
   async createApp(accountId, accountSecret, appName, encryptType = 'default', publicKey = null) {
@@ -596,6 +697,19 @@ class KeychainClient {
 
 // Usage
 const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
+
+// Generate SSH keys
+const sshKeys = await client.generateSSHKeys('Ed25519');
+console.log('Generated SSH keys:', sshKeys);
+
+// Create application with generated public key
+const app = await client.createApp(
+  'myapp_001',
+  'secure_password',
+  'My Application',
+  'public_key',
+  sshKeys.publicKey
+);
 ```
 
 ## 📝 Error Handling
@@ -619,7 +733,7 @@ const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
 
 ## 🔄 Key Rotation Workflow
 
-1. **Generate new key pair** in your application
+1. **Generate new key pair** using the SSH key generation endpoint or your application
 2. **Add new public key** via API or dashboard (automatically marks old as previous)
 3. **Store new private key** with new retrieval ID
 4. **Update application** to use new keys
@@ -662,16 +776,25 @@ const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
 - Check database connectivity
 - Verify encryption/decryption operations
 
+### Audit and Compliance
+- **Request Logging** - All API requests are logged with encrypted storage
+- **User Activity Tracking** - User IDs are tracked for all operations
+- **Sensitive Data Protection** - Automatic redaction of sensitive information
+- **Performance Monitoring** - Response times are tracked for all requests
+
 ### Backup Considerations
-- **Database backups** - Regular encrypted backups
+- **Database backups** - Regular encrypted backups including audit logs
 - **Key recovery** - Secure backup of master encryption key
 - **Application secrets** - Secure storage of account credentials
+- **Log retention** - Configure appropriate log retention policies
 
 ### Audit Logging
 - All key operations are logged with user information and encryption method
-- Application access attempts are tracked
-- Failed authentication attempts are recorded
+- SSH key generation events are tracked
+- Application access attempts are recorded
+- Failed authentication attempts are logged
 - Key rotation events are documented
+- API request/response data is encrypted and stored
 
 ---
 
@@ -679,4 +802,4 @@ const client = new KeychainClient('http://localhost:3000', 'your-jwt-token');
 
 For issues, questions, or contributions related to the Keychain Application, please refer to the main project documentation or create an issue in the project repository.
 
-The Keychain Application demonstrates the full capabilities of the TypeScript API Framework and serves as a complete example of building secure, multi-tenant applications with user access control and multiple encryption methods.
+The Keychain Application demonstrates the full capabilities of the TypeScript API Framework and serves as a complete example of building secure, multi-tenant applications with user access control, multiple encryption methods, SSH key generation, and comprehensive audit logging.
