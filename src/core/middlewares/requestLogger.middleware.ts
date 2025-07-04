@@ -275,7 +275,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     // Prepare complete log data
     const logData = {
       requestUuid: req.requestUuid!,
-      userId: req.loggedUserId,
+      userId: req.loggedUserId ?? null,
       method: req.method,
       url: req.originalUrl || req.url,
       statusCode: res.statusCode,
