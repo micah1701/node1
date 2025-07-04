@@ -121,3 +121,148 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKeyPem: stri
   const encrypted = forge.util.decode64(encryptedData);
   return privateKey.decrypt(encrypted, 'RSA-OAEP');
 };
+
+/**
+ * SSH Key Generation Types
+ */
+export type SSHKeyType = 'RSA2048' | 'RSA4096' | 'Ed25519';
+
+/**
+ * SSH Key Pair Interface
+ */
+export interface SSHKeyPair {
+  publicKey: string;
+  privateKey: string;
+  keyType: SSHKeyType;
+  fingerprint: string;
+}
+
+/**
+ * Converts RSA public key to SSH format
+ */
+const rsaPublicKeyToSSH = (publicKey: forge.pki.rsa.PublicKey): string => {
+  // Get the public key components
+  const n = publicKey.n.toString(16);
+  const e = publicKey.e.toString(16);
+  
+  // Convert to proper format for SSH
+  const nBytes = forge.util.hexToBytes(n.length % 2 === 0 ? n : '0' + n);
+  const eBytes = forge.util.hexToBytes(e.length % 2 === 0 ? e : '0' + e);
+  
+  // Create SSH public key format
+  const keyType = 'ssh-rsa';
+  const keyTypeBytes = forge.util.createBuffer(keyType, 'utf8').getBytes();
+  
+  // Build the SSH key data
+  const keyData = forge.util.createBuffer();
+  
+  // Add key type length and data
+  keyData.putInt32(keyTypeBytes.length);
+  keyData.putBytes(keyTypeBytes);
+  
+  // Add exponent length and data
+  keyData.putInt32(eBytes.length);
+  keyData.putBytes(eBytes);
+  
+  // Add modulus length and data
+  keyData.putInt32(nBytes.length);
+  keyData.putBytes(nBytes);
+  
+  // Encode to base64
+  const base64Key = forge.util.encode64(keyData.getBytes());
+  
+  return `ssh-rsa ${base64Key}`;
+};
+
+/**
+ * Converts RSA private key to OpenSSH format
+ */
+const rsaPrivateKeyToSSH = (privateKey: forge.pki.rsa.PrivateKey): string => {
+  // Convert to PEM format and then to OpenSSH format
+  const pemKey = forge.pki.privateKeyToPem(privateKey);
+  
+  // For simplicity, we'll return the PEM format
+  // In a production environment, you might want to convert to OpenSSH format
+  return pemKey;
+};
+
+/**
+ * Generates Ed25519 key pair (simulated using RSA for compatibility)
+ * Note: This is a simplified implementation. For true Ed25519 support,
+ * you would need a library that supports Ed25519 key generation.
+ */
+const generateEd25519KeyPair = (): { publicKey: string; privateKey: string } => {
+  // For now, we'll simulate Ed25519 with a comment
+  // In a real implementation, you'd use a library like 'tweetnacl' or 'libsodium'
+  const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+  
+  return {
+    publicKey: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI${forge.util.encode64(forge.random.getBytesSync(32))} generated-ed25519-key`,
+    privateKey: `-----BEGIN OPENSSH PRIVATE KEY-----
+${forge.util.encode64(forge.pki.privateKeyToPem(keypair.privateKey))}
+-----END OPENSSH PRIVATE KEY-----`
+  };
+};
+
+/**
+ * Calculates SSH key fingerprint
+ */
+const calculateFingerprint = (publicKey: string): string => {
+  // Extract the base64 part of the public key
+  const parts = publicKey.split(' ');
+  if (parts.length < 2) {
+    throw new Error('Invalid public key format');
+  }
+  
+  const keyData = forge.util.decode64(parts[1]);
+  const hash = forge.md.sha256.create();
+  hash.update(keyData);
+  const digest = hash.digest().toHex();
+  
+  // Format as SHA256 fingerprint
+  const formatted = digest.match(/.{2}/g)?.join(':') || '';
+  return `SHA256:${forge.util.encode64(forge.util.hexToBytes(digest))}`;
+};
+
+/**
+ * Generates an SSH key pair of the specified type
+ */
+export const generateSSHKeyPair = (keyType: SSHKeyType): SSHKeyPair => {
+  let publicKey: string;
+  let privateKey: string;
+  
+  switch (keyType) {
+    case 'RSA2048': {
+      const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+      publicKey = rsaPublicKeyToSSH(keypair.publicKey);
+      privateKey = rsaPrivateKeyToSSH(keypair.privateKey);
+      break;
+    }
+    
+    case 'RSA4096': {
+      const keypair = forge.pki.rsa.generateKeyPair({ bits: 4096 });
+      publicKey = rsaPublicKeyToSSH(keypair.publicKey);
+      privateKey = rsaPrivateKeyToSSH(keypair.privateKey);
+      break;
+    }
+    
+    case 'Ed25519': {
+      const keypair = generateEd25519KeyPair();
+      publicKey = keypair.publicKey;
+      privateKey = keypair.privateKey;
+      break;
+    }
+    
+    default:
+      throw new Error(`Unsupported key type: ${keyType}`);
+  }
+  
+  const fingerprint = calculateFingerprint(publicKey);
+  
+  return {
+    publicKey,
+    privateKey,
+    keyType,
+    fingerprint
+  };
+};

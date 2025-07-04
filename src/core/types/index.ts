@@ -47,3 +47,10 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface SSHKeyPair {
+  publicKey: string;
+  privateKey: string;
+  keyType: 'RSA2048' | 'RSA4096' | 'Ed25519';
+  fingerprint: string;
+}
