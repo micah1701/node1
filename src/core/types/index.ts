@@ -54,3 +54,20 @@ export interface SSHKeyPair {
   keyType: 'RSA2048' | 'RSA4096' | 'Ed25519';
   fingerprint: string;
 }
+
+export interface ApiRequestLog {
+  id: number;
+  requestUuid: string;
+  userId: string | null;
+  method: string;
+  url: string;
+  statusCode: number | null;
+  encryptedHeaders: string;
+  encryptedRequestBody: string | null;
+  encryptedResponseBody: string | null;
+  ipAddress: string;
+  userAgent: string | null;
+  responseTimeMs: number | null;
+  errorMessage: string | null;
+  createdAt: Date;
+}

@@ -422,6 +422,16 @@ class SupabaseDatabase implements DatabaseInterface {
     return data || [];
   }
 
+  // API Request Logs methods
+  async insertApiRequestLog(logData: any) {
+    const tableName = this.getTableName('api_request_logs');
+    const { error } = await this.client
+      .from(tableName)
+      .insert(logData);
+    
+    if (error) throw error;
+  }
+
   async testConnection(): Promise<boolean> {
     try {
       // Try a simple query to test the connection using a user-defined table

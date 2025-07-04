@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { config } from './core/config';
 import { errorHandler } from './core/middlewares/error.middleware';
+import { requestLogger } from './core/middlewares/requestLogger.middleware';
 import routes from './routes';
 import { logger } from './core/utils/logger';
 import { testDatabaseConnection, isDatabaseConnected } from './core/utils/db';
@@ -27,6 +28,9 @@ app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(morgan('dev')); // Request logging
+
+// Add request logging middleware for API requests
+app.use('/api', requestLogger);
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));

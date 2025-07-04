@@ -93,6 +93,31 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `;
 
+const createApiRequestLogsTableMySQL = (tableName: string) => `
+CREATE TABLE IF NOT EXISTS ${tableName} (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  request_uuid VARCHAR(36) NOT NULL UNIQUE,
+  user_id INT NULL,
+  method VARCHAR(10) NOT NULL,
+  url VARCHAR(2048) NOT NULL,
+  status_code INT NULL,
+  encrypted_headers TEXT NOT NULL,
+  encrypted_request_body TEXT NULL,
+  encrypted_response_body TEXT NULL,
+  ip_address VARCHAR(45) NOT NULL,
+  user_agent TEXT NULL,
+  response_time_ms INT NULL,
+  error_message TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_request_uuid (request_uuid),
+  INDEX idx_user_id (user_id),
+  INDEX idx_method (method),
+  INDEX idx_status_code (status_code),
+  INDEX idx_created_at (created_at),
+  INDEX idx_ip_address (ip_address)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
 // PostgreSQL table creation queries
 const createUsersTablePostgreSQL = (tableName: string) => `
 CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -248,6 +273,32 @@ CREATE TRIGGER update_${tableName}_modified_at
     EXECUTE FUNCTION update_modified_at_column();
 `;
 
+const createApiRequestLogsTablePostgreSQL = (tableName: string) => `
+CREATE TABLE IF NOT EXISTS ${tableName} (
+  id SERIAL PRIMARY KEY,
+  request_uuid VARCHAR(36) NOT NULL UNIQUE,
+  user_id INTEGER NULL,
+  method VARCHAR(10) NOT NULL,
+  url VARCHAR(2048) NOT NULL,
+  status_code INTEGER NULL,
+  encrypted_headers TEXT NOT NULL,
+  encrypted_request_body TEXT NULL,
+  encrypted_response_body TEXT NULL,
+  ip_address VARCHAR(45) NOT NULL,
+  user_agent TEXT NULL,
+  response_time_ms INTEGER NULL,
+  error_message TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_${tableName}_request_uuid ON ${tableName} (request_uuid);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_user_id ON ${tableName} (user_id);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_method ON ${tableName} (method);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_status_code ON ${tableName} (status_code);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_created_at ON ${tableName} (created_at);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_ip_address ON ${tableName} (ip_address);
+`;
+
 async function setupMySQLDatabase() {
   try {
     const connection = await mysql.createConnection({
@@ -282,6 +333,10 @@ async function setupMySQLDatabase() {
     // Create user-keychain apps lookup table
     await connection.execute(createUserKeychainAppsTableMySQL(`${tablePrefix}user_keychain_apps`));
     logger.info('User keychain apps lookup table created successfully');
+
+    // Create API request logs table
+    await connection.execute(createApiRequestLogsTableMySQL(`${tablePrefix}api_request_logs`));
+    logger.info('API request logs table created successfully');
 
     // Add foreign key constraints
     await connection.execute(`
@@ -335,6 +390,17 @@ async function setupMySQLDatabase() {
       logger.info('Foreign key constraint for user_keychain_apps keychain_app_id already exists or failed to create');
     });
 
+    // Add foreign key constraint for API request logs
+    await connection.execute(`
+      ALTER TABLE ${tablePrefix}api_request_logs 
+      ADD CONSTRAINT fk_api_request_logs_user_id 
+      FOREIGN KEY (user_id) REFERENCES ${tablePrefix}users(id) 
+      ON DELETE SET NULL;
+    `).catch(() => {
+      // Constraint might already exist
+      logger.info('Foreign key constraint for api_request_logs user_id already exists or failed to create');
+    });
+
     await connection.end();
     logger.info('MySQL database setup completed');
   } catch (error) {
@@ -352,7 +418,8 @@ function generateSupabaseSQL() {
     createKeychainAppsTablePostgreSQL(`${tablePrefix}keychain_apps`),
     createKeychainAppPublicKeysTablePostgreSQL(`${tablePrefix}keychain_app_public_keys`),
     createKeychainAppPrivateKeysTablePostgreSQL(`${tablePrefix}keychain_app_private_keys`),
-    createUserKeychainAppsTablePostgreSQL(`${tablePrefix}user_keychain_apps`)
+    createUserKeychainAppsTablePostgreSQL(`${tablePrefix}user_keychain_apps`),
+    createApiRequestLogsTablePostgreSQL(`${tablePrefix}api_request_logs`)
   ];
 
   const constraintQueries = [
@@ -379,7 +446,12 @@ function generateSupabaseSQL() {
     `ALTER TABLE ${tablePrefix}user_keychain_apps 
      ADD CONSTRAINT fk_user_keychain_apps_keychain_app_id 
      FOREIGN KEY (keychain_app_id) REFERENCES ${tablePrefix}keychain_apps(id) 
-     ON DELETE CASCADE;`
+     ON DELETE CASCADE;`,
+
+    `ALTER TABLE ${tablePrefix}api_request_logs 
+     ADD CONSTRAINT fk_api_request_logs_user_id 
+     FOREIGN KEY (user_id) REFERENCES ${tablePrefix}users(id) 
+     ON DELETE SET NULL;`
   ];
 
   return [...allQueries, ...constraintQueries].join('\n\n');
