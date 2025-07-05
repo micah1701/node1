@@ -649,8 +649,54 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
           publicKeyData = publicKeys[0];
         }
 
-        // Encrypt with the public key
-        encryptedPrivateKey = encryptWithPublicKey(private_key, publicKeyData.key);
+        // Encrypt with the public key - add detailed error handling
+        try {
+          // Validate public key format before attempting encryption
+          if (!publicKeyData.key || typeof publicKeyData.key !== 'string' || publicKeyData.key.trim().length === 0) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, 'Invalid public key: key is empty or malformed');
+          }
+
+          // Check if public key has proper format markers
+          const trimmedKey = publicKeyData.key.trim();
+          if (!trimmedKey.includes('-----BEGIN') || !trimmedKey.includes('-----END')) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, 'Invalid public key format: missing PEM headers/footers');
+          }
+
+          // Check private key size - RSA keys have encryption limits
+          const privateKeyBytes = Buffer.byteLength(private_key, 'utf8');
+          if (privateKeyBytes > 4096) { // Conservative limit for most RSA key sizes
+            throw new ApiError(HttpStatus.BAD_REQUEST, `Private key too large for public key encryption: ${privateKeyBytes} bytes (max ~4096 bytes for most RSA keys)`);
+          }
+
+          encryptedPrivateKey = encryptWithPublicKey(private_key, publicKeyData.key);
+        } catch (error: any) {
+          // Handle specific encryption errors
+          if (error instanceof ApiError) {
+            throw error; // Re-throw our custom errors
+          }
+          
+          // Handle crypto-related errors with more specific messages
+          if (error.message) {
+            if (error.message.includes('key size') || error.message.includes('data too large')) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Data too large for key size. Try using a larger RSA key or shorter private key.`);
+            } else if (error.message.includes('invalid key') || error.message.includes('bad key')) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Invalid public key format or corrupted key data.`);
+            } else if (error.message.includes('padding') || error.message.includes('PKCS')) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Padding or encoding issue with the public key.`);
+            }
+          }
+          
+          // Log the original error for debugging while providing a user-friendly message
+          logger.error(`Public key encryption failed for app ${account_id}:`, {
+            error: error.message,
+            stack: error.stack,
+            publicKeyLength: publicKeyData.key?.length,
+            privateKeyLength: private_key.length,
+            userId: req.user.id
+          });
+          
+          throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: ${error.message || 'Unknown encryption error'}`);
+        }
         break;
 
       default:
