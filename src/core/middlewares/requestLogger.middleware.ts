@@ -26,7 +26,7 @@ const SENSITIVE_FIELDS = [
   'passphrase',
   'account_secret',
   'private_key',
-  'privateKey','
+  'privatekey',
   'apisecret',
   'api_secret',
   'secret',
@@ -61,6 +61,7 @@ const redactSensitiveData = (obj: any): any => {
     if (shouldRedact) {
       redacted[key] = '[REDACTED]';
     } else if (typeof value === 'object' && value !== null) {
+      // Recursively redact nested objects and arrays
       redacted[key] = redactSensitiveData(value);
     } else {
       redacted[key] = value;
