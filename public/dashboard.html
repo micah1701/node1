@@ -616,6 +616,69 @@
         </div>
     </div>
 
+    <!-- Manage Keys Modal -->
+    <div id="manageKeysModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <button class="modal-close" onclick="closeManageKeysModal()">&times;</button>
+            <h2 id="manageKeysTitle">Manage Keys - Loading...</h2>
+            <div id="manageKeysError" class="error-message" style="display: none;"></div>
+            <div id="manageKeysSuccess" class="success-message" style="display: none;"></div>
+            
+            <!-- Add New Key Section -->
+            <div class="section-header" style="margin-top: 2rem;">
+                <h3>Add New Private Key</h3>
+                <button class="btn btn-success btn-small" onclick="toggleAddKeyForm()">
+                    <span id="addKeyToggleText">Add Key</span>
+                </button>
+            </div>
+            
+            <div id="addKeyForm" style="display: none; margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
+                <form id="addPrivateKeyForm" onsubmit="handleAddPrivateKey(event)">
+                    <div class="form-group">
+                        <label for="newRetrievalId">Retrieval ID</label>
+                        <input type="text" id="newRetrievalId" name="retrieval_id" required 
+                               placeholder="e.g., key_001, production_key, backup_key">
+                        <small>Unique identifier for this private key</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPrivateKey">Private Key</label>
+                        <textarea id="newPrivateKey" name="private_key" required 
+                                  placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                                  style="min-height: 200px; font-family: 'Courier New', monospace; font-size: 0.875rem;"></textarea>
+                        <small>Paste your private key content here</small>
+                    </div>
+                    <div class="form-group hidden" id="passphraseGroup">
+                        <label for="newPassphrase">Passphrase</label>
+                        <input type="password" id="newPassphrase" name="passphrase" 
+                               placeholder="Required for passphrase-encrypted applications">
+                        <small>This passphrase will be required to retrieve the key later</small>
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <button type="submit" class="btn btn-success" id="addKeySubmitBtn">
+                            <span id="addKeySubmitText">Store Private Key</span>
+                            <span id="addKeySubmitLoading" class="loading" style="display: none;"></span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="toggleAddKeyForm()">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Existing Keys Section -->
+            <div class="section-header">
+                <h3>Existing Private Keys</h3>
+                <button class="btn btn-secondary btn-small" onclick="refreshKeysList()">
+                    Refresh
+                </button>
+            </div>
+            
+            <div id="keysListContainer">
+                <!-- Keys will be loaded here -->
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentEditingApp = null;
 
@@ -1062,8 +1125,12 @@
         }
 
         // App action functions
+        let currentManagingApp = null;
+        let currentAppEncryptType = null;
+
         function manageKeys(accountId) {
-            alert(`Key management for ${accountId} coming soon!`);
+            currentManagingApp = accountId;
+            openManageKeysModal(accountId);
         }
 
         function viewDetails(accountId) {
@@ -1119,8 +1186,304 @@
             if (e.key === 'Escape') {
                 closeCreateAppModal();
                 closeEditAppModal();
+                closeManageKeysModal();
             }
         });
+
+        // Manage Keys Modal Functions
+        function openManageKeysModal(accountId) {
+            document.getElementById('manageKeysTitle').textContent = `Manage Keys - ${accountId}`;
+            document.getElementById('manageKeysModal').classList.add('active');
+            
+            // Load app details to determine encryption type
+            loadAppDetailsForKeyManagement(accountId);
+            
+            // Load existing keys
+            loadPrivateKeysList(accountId);
+        }
+
+        function closeManageKeysModal() {
+            document.getElementById('manageKeysModal').classList.remove('active');
+            clearManageKeysForm();
+            currentManagingApp = null;
+            currentAppEncryptType = null;
+        }
+
+        function clearManageKeysForm() {
+            document.getElementById('addPrivateKeyForm').reset();
+            document.getElementById('addKeyForm').style.display = 'none';
+            document.getElementById('addKeyToggleText').textContent = 'Add Key';
+            document.getElementById('manageKeysError').style.display = 'none';
+            document.getElementById('manageKeysSuccess').style.display = 'none';
+            document.getElementById('passphraseGroup').classList.add('hidden');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('manageKeysModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeManageKeysModal();
+            }
+        });
+
+        async function loadAppDetailsForKeyManagement(accountId) {
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch(`/api/keychain/apps/${accountId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const appData = data.data.keychain_apps || data.data;
+                    currentAppEncryptType = appData.encrypt_type;
+                    
+                    // Show/hide passphrase field based on encryption type
+                    const passphraseGroup = document.getElementById('passphraseGroup');
+                    const passphraseInput = document.getElementById('newPassphrase');
+                    
+                    if (currentAppEncryptType === 'passphrase') {
+                        passphraseGroup.classList.remove('hidden');
+                        passphraseInput.required = true;
+                    } else {
+                        passphraseGroup.classList.add('hidden');
+                        passphraseInput.required = false;
+                    }
+                } else {
+                    throw new Error('Failed to load application details');
+                }
+            } catch (error) {
+                console.error('Error loading app details:', error);
+                showManageKeysError('Failed to load application details');
+            }
+        }
+
+        async function loadPrivateKeysList(accountId) {
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch(`/api/keychain/apps/${accountId}/private-keys`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    displayPrivateKeysList(data.data);
+                } else {
+                    throw new Error('Failed to load private keys');
+                }
+            } catch (error) {
+                console.error('Error loading private keys:', error);
+                showManageKeysError('Failed to load private keys list');
+            }
+        }
+
+        function displayPrivateKeysList(keys) {
+            const container = document.getElementById('keysListContainer');
+            
+            if (keys.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔑</div>
+                        <h3>No Private Keys</h3>
+                        <p>No private keys have been stored for this application yet.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="display: grid; gap: 1rem;">
+                    ${keys.map(key => `
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 600; color: #1e293b; margin-bottom: 0.25rem;">
+                                        ${escapeHtml(key.retrieval_id)}
+                                    </div>
+                                    <div style="font-size: 0.875rem; color: #64748b;">
+                                        Created: ${formatDate(key.created_at)}
+                                    </div>
+                                    ${key.modified_at !== key.created_at ? `
+                                        <div style="font-size: 0.875rem; color: #64748b;">
+                                            Modified: ${formatDate(key.modified_at)}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-secondary btn-small" onclick="retrievePrivateKey('${escapeHtml(key.retrieval_id)}')">
+                                        Retrieve
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function toggleAddKeyForm() {
+            const form = document.getElementById('addKeyForm');
+            const toggleText = document.getElementById('addKeyToggleText');
+            
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                toggleText.textContent = 'Cancel';
+                document.getElementById('newRetrievalId').focus();
+            } else {
+                form.style.display = 'none';
+                toggleText.textContent = 'Add Key';
+                document.getElementById('addPrivateKeyForm').reset();
+            }
+        }
+
+        async function handleAddPrivateKey(event) {
+            event.preventDefault();
+            setAddKeyLoading(true);
+            document.getElementById('manageKeysError').style.display = 'none';
+            document.getElementById('manageKeysSuccess').style.display = 'none';
+
+            const formData = new FormData(event.target);
+            const keyData = {
+                retrieval_id: formData.get('retrieval_id'),
+                private_key: formData.get('private_key')
+            };
+
+            // Add passphrase if required
+            if (currentAppEncryptType === 'passphrase') {
+                const passphrase = formData.get('passphrase');
+                if (!passphrase) {
+                    showManageKeysError('Passphrase is required for this application');
+                    setAddKeyLoading(false);
+                    return;
+                }
+                keyData.passphrase = passphrase;
+            }
+
+            const token = checkAuth();
+            if (!token) return;
+
+            try {
+                const response = await fetch(`/api/keychain/apps/${currentManagingApp}/private-keys`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(keyData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showManageKeysSuccess('Private key stored successfully!');
+                    document.getElementById('addPrivateKeyForm').reset();
+                    toggleAddKeyForm(); // Hide the form
+                    loadPrivateKeysList(currentManagingApp); // Refresh the list
+                } else {
+                    showManageKeysError(data.error || 'Failed to store private key');
+                }
+            } catch (error) {
+                console.error('Add private key error:', error);
+                showManageKeysError('Network error. Please try again.');
+            } finally {
+                setAddKeyLoading(false);
+            }
+        }
+
+        async function retrievePrivateKey(retrievalId) {
+            const token = checkAuth();
+            if (!token) return;
+
+            let passphrase = null;
+            
+            // If app uses passphrase encryption, prompt for it
+            if (currentAppEncryptType === 'passphrase') {
+                passphrase = prompt('Enter the passphrase for this private key:');
+                if (!passphrase) {
+                    return; // User cancelled
+                }
+            }
+
+            try {
+                const requestBody = passphrase ? { passphrase } : {};
+                
+                const response = await fetch(`/api/keychain/apps/${currentManagingApp}/private-keys/${retrievalId}/retrieve`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Show the private key in a modal or copy to clipboard
+                    const privateKey = data.data.private_key;
+                    
+                    if (currentAppEncryptType === 'public_key') {
+                        alert(`Private key retrieved (encrypted with public key):\n\nNote: This key is encrypted and must be decrypted client-side with your private key.\n\n${privateKey}`);
+                    } else {
+                        // Try to copy to clipboard
+                        if (navigator.clipboard) {
+                            try {
+                                await navigator.clipboard.writeText(privateKey);
+                                showManageKeysSuccess(`Private key for "${retrievalId}" copied to clipboard!`);
+                            } catch (err) {
+                                // Fallback to showing in alert
+                                alert(`Private key for "${retrievalId}":\n\n${privateKey}`);
+                            }
+                        } else {
+                            // Fallback to showing in alert
+                            alert(`Private key for "${retrievalId}":\n\n${privateKey}`);
+                        }
+                    }
+                } else {
+                    showManageKeysError(data.error || 'Failed to retrieve private key');
+                }
+            } catch (error) {
+                console.error('Retrieve private key error:', error);
+                showManageKeysError('Network error. Please try again.');
+            }
+        }
+
+        function refreshKeysList() {
+            if (currentManagingApp) {
+                loadPrivateKeysList(currentManagingApp);
+            }
+        }
+
+        function setAddKeyLoading(loading) {
+            const submitBtn = document.getElementById('addKeySubmitBtn');
+            const submitText = document.getElementById('addKeySubmitText');
+            const submitLoading = document.getElementById('addKeySubmitLoading');
+            
+            submitBtn.disabled = loading;
+            submitText.style.display = loading ? 'none' : 'inline';
+            submitLoading.style.display = loading ? 'inline-block' : 'none';
+        }
+
+        function showManageKeysError(message) {
+            const errorDiv = document.getElementById('manageKeysError');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('manageKeysSuccess').style.display = 'none';
+        }
+
+        function showManageKeysSuccess(message) {
+            const successDiv = document.getElementById('manageKeysSuccess');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('manageKeysError').style.display = 'none';
+        }
     </script>
 </body>
 </html>
