@@ -672,6 +672,7 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
           // Different size limits for different key types
           let maxSize = 4096; // Default for RSA
           if (isSSHEd25519) {
+          }
           if ((isRSAPEM || isSSHRSA) && privateKeyBytes > 4096) { // Conservative limit for RSA keys
             throw new ApiError(HttpStatus.BAD_REQUEST, `Private key too large for RSA public key encryption: ${privateKeyBytes} bytes (max ~4096 bytes for RSA keys). Consider using Ed25519 for larger data.`);
           } else if (isSSHEd25519 && privateKeyBytes > 1048576) { // 1MB limit for Ed25519-derived AES encryption

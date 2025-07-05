@@ -249,10 +249,11 @@ The framework supports three different encryption methods for private key storag
 - **Setup**: Passphrase must be provided with each store/retrieve operation
 
 ### 3. Public Key Encryption
-- **Description**: Uses RSA public key encryption with the application's active public key
+- **Description**: Uses public key encryption (RSA or Ed25519) with the application's active public key
 - **Use Case**: End-to-end encryption where server never has access to decrypted data
-- **Security**: Highest security - server cannot decrypt at all
-- **Setup**: Requires providing a public key during application creation or adding one later
+- **Security**: Highest security - server cannot decrypt RSA data, limited decryption for Ed25519
+- **Setup**: Requires providing a public key (RSA PEM, SSH RSA, or SSH Ed25519) during application creation or adding one later
+- **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa), SSH Ed25519 (ssh-ed25519)
 
 ## Extending the Framework
 
