@@ -160,7 +160,7 @@ const convertSSHRSAToPEM = (sshKey: string): string => {
     
     return forge.pki.publicKeyToPem(publicKey);
   } catch (error) {
-    throw new Error(`Failed to convert SSH RSA key to PEM: ${error.message}`);
+    throw new Error(`Failed to convert SSH RSA key to PEM: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -199,7 +199,7 @@ const encryptWithEd25519Derived = (data: string, ed25519PublicKey: string): stri
     // Prepend a marker to indicate this is Ed25519-derived encryption
     return 'ED25519:' + forge.util.encode64(combined);
   } catch (error) {
-    throw new Error(`Failed to encrypt with Ed25519-derived key: ${error.message}`);
+    throw new Error(`Failed to encrypt with Ed25519-derived key: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -240,7 +240,7 @@ const decryptWithEd25519Derived = (encryptedData: string, ed25519PublicKey: stri
     
     return decipher.output.toString();
   } catch (error) {
-    throw new Error(`Failed to decrypt with Ed25519-derived key: ${error.message}`);
+    throw new Error(`Failed to decrypt with Ed25519-derived key: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -258,7 +258,7 @@ export const encryptWithPublicKey = (data: string, publicKey: string): string =>
         const encrypted = rsaPublicKey.encrypt(data, 'RSA-OAEP');
         return 'RSA:' + forge.util.encode64(encrypted);
       } catch (error) {
-        throw new Error(`RSA PEM encryption failed: ${error.message}`);
+        throw new Error(`RSA PEM encryption failed: ${error instanceof Error ? error.message : String(error)}`);
       }
       
     case 'ssh-rsa':
@@ -269,7 +269,7 @@ export const encryptWithPublicKey = (data: string, publicKey: string): string =>
         const encrypted = rsaPublicKey.encrypt(data, 'RSA-OAEP');
         return 'RSA:' + forge.util.encode64(encrypted);
       } catch (error) {
-        throw new Error(`SSH RSA encryption failed: ${error.message}`);
+        throw new Error(`SSH RSA encryption failed: ${error instanceof Error ? error.message : String(error)}`);
       }
       
     case 'ssh-ed25519':
@@ -293,7 +293,7 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKey: string)
       const encrypted = forge.util.decode64(actualEncryptedData);
       return rsaPrivateKey.decrypt(encrypted, 'RSA-OAEP');
     } catch (error) {
-      throw new Error(`RSA decryption failed: ${error.message}`);
+      throw new Error(`RSA decryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   } else if (encryptedData.startsWith('ED25519:')) {
     // For Ed25519, we need the corresponding public key to decrypt
@@ -306,7 +306,7 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKey: string)
       const encrypted = forge.util.decode64(encryptedData);
       return rsaPrivateKey.decrypt(encrypted, 'RSA-OAEP');
     } catch (error) {
-      throw new Error(`Legacy RSA decryption failed: ${error.message}`);
+      throw new Error(`Legacy RSA decryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 };
