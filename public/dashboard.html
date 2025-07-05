@@ -566,8 +566,8 @@
                 <div class="form-group hidden" id="publicKeyGroup">
                     <label for="createPublicKey">Public Key <span style="color: #ef4444;">*</span></label>
                     <textarea id="createPublicKey" name="public_key" 
-                              placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"></textarea>
-                    <small>Paste your PEM-formatted public key here. This will be used to encrypt stored values.</small>
+                              placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----&#10;&#10;OR&#10;&#10;ssh-rsa AAAAB3NzaC1yc2EAAAA...&#10;&#10;OR&#10;&#10;ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."></textarea>
+                    <small>Paste your public key here. Supported formats: RSA PEM, SSH RSA, or SSH Ed25519. This will be used to encrypt stored values.</small>
                 </div>
                 <button type="submit" class="form-submit" id="createAppSubmitBtn">
                     <span id="createAppSubmitText">Create Application</span>

@@ -656,16 +656,26 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
             throw new ApiError(HttpStatus.BAD_REQUEST, 'Invalid public key: key is empty or malformed');
           }
 
-          // Check if public key has proper format markers
+          // Detect key type and validate format
           const trimmedKey = publicKeyData.key.trim();
-          if (!trimmedKey.includes('-----BEGIN') || !trimmedKey.includes('-----END')) {
-            throw new ApiError(HttpStatus.BAD_REQUEST, 'Invalid public key format: missing PEM headers/footers');
+          const isRSAPEM = trimmedKey.includes('-----BEGIN PUBLIC KEY-----') && trimmedKey.includes('-----END PUBLIC KEY-----');
+          const isSSHRSA = trimmedKey.startsWith('ssh-rsa ');
+          const isSSHEd25519 = trimmedKey.startsWith('ssh-ed25519 ');
+          
+          if (!isRSAPEM && !isSSHRSA && !isSSHEd25519) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, 'Invalid public key format. Supported formats: RSA PEM (-----BEGIN PUBLIC KEY-----), SSH RSA (ssh-rsa), SSH Ed25519 (ssh-ed25519)');
           }
 
           // Check private key size - RSA keys have encryption limits
           const privateKeyBytes = Buffer.byteLength(private_key, 'utf8');
-          if (privateKeyBytes > 4096) { // Conservative limit for most RSA key sizes
-            throw new ApiError(HttpStatus.BAD_REQUEST, `Private key too large for public key encryption: ${privateKeyBytes} bytes (max ~4096 bytes for most RSA keys)`);
+          
+          // Different size limits for different key types
+          let maxSize = 4096; // Default for RSA
+          if (isSSHEd25519) {
+          if ((isRSAPEM || isSSHRSA) && privateKeyBytes > 4096) { // Conservative limit for RSA keys
+            throw new ApiError(HttpStatus.BAD_REQUEST, `Private key too large for RSA public key encryption: ${privateKeyBytes} bytes (max ~4096 bytes for RSA keys). Consider using Ed25519 for larger data.`);
+          } else if (isSSHEd25519 && privateKeyBytes > 1048576) { // 1MB limit for Ed25519-derived AES encryption
+            throw new ApiError(HttpStatus.BAD_REQUEST, `Private key too large: ${privateKeyBytes} bytes (max 1MB for Ed25519-derived encryption)`);
           }
 
           encryptedPrivateKey = encryptWithPublicKey(private_key, publicKeyData.key);
@@ -678,11 +688,13 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
           // Handle crypto-related errors with more specific messages
           if (error.message) {
             if (error.message.includes('key size') || error.message.includes('data too large')) {
-              throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Data too large for key size. Try using a larger RSA key or shorter private key.`);
+              throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Data too large for key size. Try using a larger RSA key, shorter private key, or switch to Ed25519.`);
             } else if (error.message.includes('invalid key') || error.message.includes('bad key')) {
               throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Invalid public key format or corrupted key data.`);
             } else if (error.message.includes('padding') || error.message.includes('PKCS')) {
               throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Padding or encoding issue with the public key.`);
+            } else if (error.message.includes('Unsupported public key format')) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, error.message);
             }
           }
           
@@ -821,8 +833,41 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
 
       case 'public_key':
         // For public key encryption, we cannot decrypt the private key server-side
-        // Return the encrypted value as-is for client-side decryption
-        decryptedPrivateKey = privateKeyData.private_key;
+        // For Ed25519, we can decrypt using the public key; for RSA, return encrypted data
+        if (privateKeyData.private_key.startsWith('ED25519:')) {
+          // Get the active public key for Ed25519 decryption
+          let publicKeyData;
+          
+          if (config.database.type === 'mysql') {
+            const publicKeysTable = db.getTableName('keychain_app_public_keys');
+            const [publicKeys] = await db.execute(
+              `SELECT \`key\` FROM ${publicKeysTable} WHERE app_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+              [appData.id || userApp.keychain_apps.id]
+            ) as [any[], any];
+
+            if (publicKeys.length === 0) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for Ed25519 decryption');
+            }
+            publicKeyData = publicKeys[0];
+          } else {
+            const publicKeys = await (db as any).findPublicKeysByAppId(appData.id || userApp.keychain_apps.id, 'active');
+            if (publicKeys.length === 0) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for Ed25519 decryption');
+            }
+            publicKeyData = publicKeys[0];
+          }
+
+          // Import the Ed25519 decryption function
+          const { decryptWithEd25519PublicKey } = require('../../core/utils/encryption');
+          try {
+            decryptedPrivateKey = decryptWithEd25519PublicKey(privateKeyData.private_key, publicKeyData.key);
+          } catch (error) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, `Ed25519 decryption failed: ${error.message}`);
+          }
+        } else {
+          // RSA encryption - return encrypted value as-is for client-side decryption
+          decryptedPrivateKey = privateKeyData.private_key;
+        }
         break;
 
       default:

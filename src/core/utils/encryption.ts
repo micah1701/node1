@@ -105,21 +105,217 @@ export const generateKeyPair = (): { publicKey: string; privateKey: string } => 
 };
 
 /**
- * Encrypts data using a public key
+ * Detects the type of public key (RSA PEM, SSH RSA, or SSH Ed25519)
  */
-export const encryptWithPublicKey = (data: string, publicKeyPem: string): string => {
-  const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-  const encrypted = publicKey.encrypt(data, 'RSA-OAEP');
-  return forge.util.encode64(encrypted);
+const detectKeyType = (publicKey: string): 'rsa-pem' | 'ssh-rsa' | 'ssh-ed25519' | 'unknown' => {
+  const trimmedKey = publicKey.trim();
+  
+  if (trimmedKey.includes('-----BEGIN PUBLIC KEY-----') && trimmedKey.includes('-----END PUBLIC KEY-----')) {
+    return 'rsa-pem';
+  }
+  
+  if (trimmedKey.startsWith('ssh-rsa ')) {
+    return 'ssh-rsa';
+  }
+  
+  if (trimmedKey.startsWith('ssh-ed25519 ')) {
+    return 'ssh-ed25519';
+  }
+  
+  return 'unknown';
 };
 
 /**
- * Decrypts data using a private key
+ * Converts SSH RSA public key to PEM format
  */
-export const decryptWithPrivateKey = (encryptedData: string, privateKeyPem: string): string => {
-  const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-  const encrypted = forge.util.decode64(encryptedData);
-  return privateKey.decrypt(encrypted, 'RSA-OAEP');
+const convertSSHRSAToPEM = (sshKey: string): string => {
+  try {
+    const parts = sshKey.trim().split(' ');
+    if (parts.length < 2) {
+      throw new Error('Invalid SSH RSA key format');
+    }
+    
+    const keyData = forge.util.decode64(parts[1]);
+    const buffer = forge.util.createBuffer(keyData);
+    
+    // Parse SSH key format
+    const keyTypeLength = buffer.getInt32();
+    const keyType = buffer.getBytes(keyTypeLength);
+    
+    if (keyType !== 'ssh-rsa') {
+      throw new Error('Not an SSH RSA key');
+    }
+    
+    const eLength = buffer.getInt32();
+    const e = buffer.getBytes(eLength);
+    
+    const nLength = buffer.getInt32();
+    const n = buffer.getBytes(nLength);
+    
+    // Create RSA public key
+    const publicKey = forge.pki.rsa.setPublicKey(
+      new forge.jsbn.BigInteger(forge.util.bytesToHex(n), 16),
+      new forge.jsbn.BigInteger(forge.util.bytesToHex(e), 16)
+    );
+    
+    return forge.pki.publicKeyToPem(publicKey);
+  } catch (error) {
+    throw new Error(`Failed to convert SSH RSA key to PEM: ${error.message}`);
+  }
+};
+
+/**
+ * Encrypts data using AES with a key derived from Ed25519 public key
+ * Since Ed25519 is not suitable for direct encryption, we use it to derive an AES key
+ */
+const encryptWithEd25519Derived = (data: string, ed25519PublicKey: string): string => {
+  try {
+    const parts = ed25519PublicKey.trim().split(' ');
+    if (parts.length < 2) {
+      throw new Error('Invalid SSH Ed25519 key format');
+    }
+    
+    // Use the Ed25519 public key as a seed for key derivation
+    const keyData = parts[1]; // Base64 part of the key
+    
+    // Create a deterministic salt from the key
+    const salt = forge.md.sha256.create().update(keyData).digest().getBytes().substring(0, 16);
+    
+    // Derive AES key from the Ed25519 public key
+    const aesKey = deriveKey(keyData, salt);
+    
+    // Generate random IV for this encryption
+    const iv = generateIV();
+    
+    // Encrypt with AES
+    const cipher = forge.cipher.createCipher('AES-CBC', aesKey);
+    cipher.start({ iv });
+    cipher.update(forge.util.createBuffer(data, 'utf8'));
+    cipher.finish();
+    
+    const encrypted = cipher.output.getBytes();
+    const combined = iv + encrypted;
+    
+    // Prepend a marker to indicate this is Ed25519-derived encryption
+    return 'ED25519:' + forge.util.encode64(combined);
+  } catch (error) {
+    throw new Error(`Failed to encrypt with Ed25519-derived key: ${error.message}`);
+  }
+};
+
+/**
+ * Decrypts data that was encrypted with Ed25519-derived AES key
+ */
+const decryptWithEd25519Derived = (encryptedData: string, ed25519PublicKey: string): string => {
+  try {
+    // Check for Ed25519 marker
+    if (!encryptedData.startsWith('ED25519:')) {
+      throw new Error('Data was not encrypted with Ed25519-derived key');
+    }
+    
+    const actualEncryptedData = encryptedData.substring(8); // Remove 'ED25519:' prefix
+    
+    const parts = ed25519PublicKey.trim().split(' ');
+    if (parts.length < 2) {
+      throw new Error('Invalid SSH Ed25519 key format');
+    }
+    
+    const keyData = parts[1]; // Base64 part of the key
+    
+    // Recreate the same salt used during encryption
+    const salt = forge.md.sha256.create().update(keyData).digest().getBytes().substring(0, 16);
+    
+    // Derive the same AES key
+    const aesKey = deriveKey(keyData, salt);
+    
+    // Decrypt
+    const combined = forge.util.decode64(actualEncryptedData);
+    const iv = combined.substring(0, 16);
+    const encrypted = combined.substring(16);
+    
+    const decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
+    decipher.start({ iv });
+    decipher.update(forge.util.createBuffer(encrypted));
+    decipher.finish();
+    
+    return decipher.output.toString();
+  } catch (error) {
+    throw new Error(`Failed to decrypt with Ed25519-derived key: ${error.message}`);
+  }
+};
+
+/**
+ * Encrypts data using a public key (supports RSA PEM, SSH RSA, and SSH Ed25519)
+ */
+export const encryptWithPublicKey = (data: string, publicKey: string): string => {
+  const keyType = detectKeyType(publicKey);
+  
+  switch (keyType) {
+    case 'rsa-pem':
+      // Original RSA PEM encryption
+      try {
+        const rsaPublicKey = forge.pki.publicKeyFromPem(publicKey);
+        const encrypted = rsaPublicKey.encrypt(data, 'RSA-OAEP');
+        return 'RSA:' + forge.util.encode64(encrypted);
+      } catch (error) {
+        throw new Error(`RSA PEM encryption failed: ${error.message}`);
+      }
+      
+    case 'ssh-rsa':
+      // Convert SSH RSA to PEM and encrypt
+      try {
+        const pemKey = convertSSHRSAToPEM(publicKey);
+        const rsaPublicKey = forge.pki.publicKeyFromPem(pemKey);
+        const encrypted = rsaPublicKey.encrypt(data, 'RSA-OAEP');
+        return 'RSA:' + forge.util.encode64(encrypted);
+      } catch (error) {
+        throw new Error(`SSH RSA encryption failed: ${error.message}`);
+      }
+      
+    case 'ssh-ed25519':
+      // Use Ed25519-derived AES encryption
+      return encryptWithEd25519Derived(data, publicKey);
+      
+    default:
+      throw new Error(`Unsupported public key format. Supported formats: RSA PEM (-----BEGIN PUBLIC KEY-----), SSH RSA (ssh-rsa), SSH Ed25519 (ssh-ed25519)`);
+  }
+};
+
+/**
+ * Decrypts data using a private key (supports RSA PEM and Ed25519-derived)
+ */
+export const decryptWithPrivateKey = (encryptedData: string, privateKey: string): string => {
+  if (encryptedData.startsWith('RSA:')) {
+    // RSA decryption
+    const actualEncryptedData = encryptedData.substring(4); // Remove 'RSA:' prefix
+    try {
+      const rsaPrivateKey = forge.pki.privateKeyFromPem(privateKey);
+      const encrypted = forge.util.decode64(actualEncryptedData);
+      return rsaPrivateKey.decrypt(encrypted, 'RSA-OAEP');
+    } catch (error) {
+      throw new Error(`RSA decryption failed: ${error.message}`);
+    }
+  } else if (encryptedData.startsWith('ED25519:')) {
+    // For Ed25519, we need the corresponding public key to decrypt
+    // This is a limitation - we'd need to store the public key reference
+    throw new Error('Ed25519 decryption requires the corresponding public key. Use decryptWithEd25519Derived() with the public key.');
+  } else {
+    // Legacy format - assume RSA
+    try {
+      const rsaPrivateKey = forge.pki.privateKeyFromPem(privateKey);
+      const encrypted = forge.util.decode64(encryptedData);
+      return rsaPrivateKey.decrypt(encrypted, 'RSA-OAEP');
+    } catch (error) {
+      throw new Error(`Legacy RSA decryption failed: ${error.message}`);
+    }
+  }
+};
+
+/**
+ * Decrypts Ed25519-derived encrypted data using the public key
+ */
+export const decryptWithEd25519PublicKey = (encryptedData: string, ed25519PublicKey: string): string => {
+  return decryptWithEd25519Derived(encryptedData, ed25519PublicKey);
 };
 
 /**
@@ -135,6 +331,7 @@ export interface SSHKeyPair {
   privateKey: string;
   keyType: SSHKeyType;
   fingerprint: string;
+  pemPublicKey?: string; // For RSA keys, also provide PEM format
 }
 
 /**
@@ -230,12 +427,14 @@ const calculateFingerprint = (publicKey: string): string => {
 export const generateSSHKeyPair = (keyType: SSHKeyType): SSHKeyPair => {
   let publicKey: string;
   let privateKey: string;
+  let pemPublicKey: string | undefined;
   
   switch (keyType) {
     case 'RSA2048': {
       const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
       publicKey = rsaPublicKeyToSSH(keypair.publicKey);
       privateKey = rsaPrivateKeyToSSH(keypair.privateKey);
+      pemPublicKey = forge.pki.publicKeyToPem(keypair.publicKey);
       break;
     }
     
@@ -243,6 +442,7 @@ export const generateSSHKeyPair = (keyType: SSHKeyType): SSHKeyPair => {
       const keypair = forge.pki.rsa.generateKeyPair({ bits: 4096 });
       publicKey = rsaPublicKeyToSSH(keypair.publicKey);
       privateKey = rsaPrivateKeyToSSH(keypair.privateKey);
+      pemPublicKey = forge.pki.publicKeyToPem(keypair.publicKey);
       break;
     }
     
@@ -250,6 +450,7 @@ export const generateSSHKeyPair = (keyType: SSHKeyType): SSHKeyPair => {
       const keypair = generateEd25519KeyPair();
       publicKey = keypair.publicKey;
       privateKey = keypair.privateKey;
+      // Ed25519 doesn't have a PEM public key equivalent for encryption
       break;
     }
     
@@ -263,6 +464,7 @@ export const generateSSHKeyPair = (keyType: SSHKeyType): SSHKeyPair => {
     publicKey,
     privateKey,
     keyType,
-    fingerprint
+    fingerprint,
+    pemPublicKey
   };
 };
