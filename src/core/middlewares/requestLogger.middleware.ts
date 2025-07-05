@@ -26,7 +26,7 @@ const SENSITIVE_FIELDS = [
   'passphrase',
   'account_secret',
   'private_key',
-  'privateKey',
+  'privateKey','
   'apisecret',
   'api_secret',
   'secret',
