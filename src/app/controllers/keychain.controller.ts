@@ -686,29 +686,31 @@ export const storePrivateKey = async (req: Request, res: Response, next: NextFun
             throw error; // Re-throw our custom errors
           }
           
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
           // Handle crypto-related errors with more specific messages
-          if (error.message) {
-            if (error.message.includes('key size') || error.message.includes('data too large')) {
+          if (errorMessage) {
+            if (errorMessage.includes('key size') || errorMessage.includes('data too large')) {
               throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Data too large for key size. Try using a larger RSA key, shorter private key, or switch to Ed25519.`);
-            } else if (error.message.includes('invalid key') || error.message.includes('bad key')) {
+            } else if (errorMessage.includes('invalid key') || errorMessage.includes('bad key')) {
               throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Invalid public key format or corrupted key data.`);
-            } else if (error.message.includes('padding') || error.message.includes('PKCS')) {
+            } else if (errorMessage.includes('padding') || errorMessage.includes('PKCS')) {
               throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: Padding or encoding issue with the public key.`);
-            } else if (error.message.includes('Unsupported public key format')) {
-              throw new ApiError(HttpStatus.BAD_REQUEST, error.message);
+            } else if (errorMessage.includes('Unsupported public key format')) {
+              throw new ApiError(HttpStatus.BAD_REQUEST, errorMessage);
             }
           }
           
           // Log the original error for debugging while providing a user-friendly message
           logger.error(`Public key encryption failed for app ${account_id}:`, {
-            error: error.message,
-            stack: error.stack,
+            error: errorMessage,
+            stack: error instanceof Error ? error.stack : undefined,
             publicKeyLength: publicKeyData.key?.length,
             privateKeyLength: private_key.length,
             userId: req.user.id
           });
           
-          throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: ${error.message || 'Unknown encryption error'}`);
+          throw new ApiError(HttpStatus.BAD_REQUEST, `Public key encryption failed: ${errorMessage || 'Unknown encryption error'}`);
         }
         break;
 
@@ -843,7 +845,7 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
             const publicKeysTable = db.getTableName('keychain_app_public_keys');
             const [publicKeys] = await db.execute(
               `SELECT \`key\` FROM ${publicKeysTable} WHERE app_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-              [appData.id || userApp.keychain_apps.id]
+              [appData.id]
             ) as [any[], any];
 
             if (publicKeys.length === 0) {
@@ -851,7 +853,7 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
             }
             publicKeyData = publicKeys[0];
           } else {
-            const publicKeys = await (db as any).findPublicKeysByAppId(appData.id || userApp.keychain_apps.id, 'active');
+            const publicKeys = await (db as any).findPublicKeysByAppId(appData.id, 'active');
             if (publicKeys.length === 0) {
               throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for Ed25519 decryption');
             }
@@ -862,8 +864,9 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
           const { decryptWithEd25519PublicKey } = require('../../core/utils/encryption');
           try {
             decryptedPrivateKey = decryptWithEd25519PublicKey(privateKeyData.private_key, publicKeyData.key);
-          } catch (error) {
-            throw new ApiError(HttpStatus.BAD_REQUEST, `Ed25519 decryption failed: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new ApiError(HttpStatus.BAD_REQUEST, `Ed25519 decryption failed: ${errorMessage}`);
           }
         } else {
           // RSA encryption - return encrypted value as-is for client-side decryption
