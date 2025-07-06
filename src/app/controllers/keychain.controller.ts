@@ -835,43 +835,9 @@ export const getPrivateKey = async (req: Request, res: Response, next: NextFunct
         break;
 
       case 'public_key':
-        // For public key encryption, we cannot decrypt the private key server-side
-        // For Ed25519, we can decrypt using the public key; for RSA, return encrypted data
-        if (privateKeyData.private_key.startsWith('ED25519:')) {
-          // Get the active public key for Ed25519 decryption
-          let publicKeyData;
-          
-          if (config.database.type === 'mysql') {
-            const publicKeysTable = db.getTableName('keychain_app_public_keys');
-            const [publicKeys] = await db.execute(
-              `SELECT \`key\` FROM ${publicKeysTable} WHERE app_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-              [appData.id]
-            ) as [any[], any];
-
-            if (publicKeys.length === 0) {
-              throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for Ed25519 decryption');
-            }
-            publicKeyData = publicKeys[0];
-          } else {
-            const publicKeys = await (db as any).findPublicKeysByAppId(appData.id, 'active');
-            if (publicKeys.length === 0) {
-              throw new ApiError(HttpStatus.BAD_REQUEST, 'No active public key found for Ed25519 decryption');
-            }
-            publicKeyData = publicKeys[0];
-          }
-
-          // Import the Ed25519 decryption function
-          const { decryptWithEd25519PublicKey } = require('../../core/utils/encryption');
-          try {
-            decryptedPrivateKey = decryptWithEd25519PublicKey(privateKeyData.private_key, publicKeyData.key);
-          } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new ApiError(HttpStatus.BAD_REQUEST, `Ed25519 decryption failed: ${errorMessage}`);
-          }
-        } else {
-          // RSA encryption - return encrypted value as-is for client-side decryption
-          decryptedPrivateKey = privateKeyData.private_key;
-        }
+        // For public key encryption, return encrypted data as-is for client-side decryption
+        // This applies to both RSA and Ed25519 encrypted data for true end-to-end encryption
+        decryptedPrivateKey = privateKeyData.private_key;
         break;
 
       default:

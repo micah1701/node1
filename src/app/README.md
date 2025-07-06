@@ -366,7 +366,7 @@ Retrieve and decrypt a private key. Decryption method depends on the application
 
 **Note:** For `public_key` encryption type, the `private_key` field contains encrypted data that must be decrypted client-side.
 
-**Ed25519 Exception:** If the application uses Ed25519 public key encryption, the server can decrypt the data using the stored public key, so the `private_key` field will contain the actual decrypted private key.
+**Security Note:** For both RSA and Ed25519 public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
 
 #### List Private Keys
 ```http
