@@ -361,12 +361,15 @@ Retrieve and decrypt a private key. Decryption method depends on the application
     "private_key": "string",
     "created_at": "datetime"
   }
+   - **Supported Keys**: RSA only (Ed25519 is a signature algorithm, not suitable for encryption)
 }
-```
+   - **Security**: Highest security - server cannot decrypt data
+   - **Setup**: Requires providing an RSA public key (RSA PEM or SSH RSA) during application creation or adding one later
+   - **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa)
 
-**Note:** For `public_key` encryption type, the `private_key` field contains encrypted data that must be decrypted client-side.
+**Security Note:** For RSA public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
 
-**Security Note:** For both RSA and Ed25519 public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
+**Important:** Ed25519 keys are not supported for encryption because Ed25519 is a digital signature algorithm, not an encryption algorithm. For elliptic curve encryption, consider X25519, but RSA remains the recommended option for this application.
 
 #### List Private Keys
 ```http

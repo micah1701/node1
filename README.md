@@ -250,12 +250,15 @@ The framework supports three different encryption methods for private key storag
 
 ### 3. Public Key Encryption
 - **Description**: Uses public key encryption (RSA or Ed25519) with the application's active public key
+   - **Supported Keys**: RSA only (Ed25519 is a signature algorithm, not suitable for encryption)
 - **Use Case**: End-to-end encryption where server never has access to decrypted data
-- **Security**: Highest security - server cannot decrypt RSA data, limited decryption for Ed25519
-- **Setup**: Requires providing a public key (RSA PEM, SSH RSA, or SSH Ed25519) during application creation or adding one later
-- **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa), SSH Ed25519 (ssh-ed25519)
+   - **Security**: Highest security - server cannot decrypt data
+   - **Setup**: Requires providing an RSA public key (RSA PEM or SSH RSA) during application creation or adding one later
+   - **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa)
 
-**Security Note:** For both RSA and Ed25519 public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
+**Security Note:** For RSA public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
+
+**Important:** Ed25519 keys are not supported for encryption because Ed25519 is a digital signature algorithm, not an encryption algorithm. For elliptic curve encryption, consider X25519, but RSA remains the recommended option for this application.
 
 ## Extending the Framework
 
