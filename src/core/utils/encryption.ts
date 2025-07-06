@@ -1,4 +1,6 @@
 import forge from 'node-forge';
+import * as nacl from 'tweetnacl';
+import * as naclUtil from 'tweetnacl-util';
 import { config } from '../config';
 
 /**
@@ -107,7 +109,7 @@ export const generateKeyPair = (): { publicKey: string; privateKey: string } => 
 /**
  * Detects the type of public key (RSA PEM, SSH RSA, or SSH Ed25519)
  */
-const detectKeyType = (publicKey: string): 'rsa-pem' | 'ssh-rsa' | 'ssh-ed25519' | 'unknown' => {
+const detectKeyType = (publicKey: string): 'rsa-pem' | 'ssh-rsa' | 'ssh-ed25519' | 'x25519' | 'unknown' => {
   const trimmedKey = publicKey.trim();
   
   if (trimmedKey.includes('-----BEGIN PUBLIC KEY-----') && trimmedKey.includes('-----END PUBLIC KEY-----')) {
@@ -120,6 +122,12 @@ const detectKeyType = (publicKey: string): 'rsa-pem' | 'ssh-rsa' | 'ssh-ed25519'
   
   if (trimmedKey.startsWith('ssh-ed25519 ')) {
     return 'ssh-ed25519';
+  }
+  
+  // X25519 keys are typically base64 encoded 32-byte keys
+  // We'll use a prefix to identify them: "x25519:"
+  if (trimmedKey.startsWith('x25519:')) {
+    return 'x25519';
   }
   
   return 'unknown';
@@ -165,13 +173,100 @@ const convertSSHRSAToPEM = (sshKey: string): string => {
 };
 
 /**
+ * Encrypts data using X25519 public key
+ * Uses X25519 for key exchange and ChaCha20-Poly1305 for encryption
+ */
+const encryptWithX25519 = (data: string, x25519PublicKey: string): string => {
+  try {
+    // Remove the x25519: prefix and decode the public key
+    const publicKeyB64 = x25519PublicKey.replace('x25519:', '');
+    const publicKeyBytes = naclUtil.decodeBase64(publicKeyB64);
+    
+    if (publicKeyBytes.length !== 32) {
+      throw new Error('Invalid X25519 public key length. Expected 32 bytes.');
+    }
+    
+    // Generate ephemeral key pair for this encryption
+    const ephemeralKeyPair = nacl.box.keyPair();
+    
+    // Generate random nonce
+    const nonce = nacl.randomBytes(24);
+    
+    // Encrypt the data
+    const dataBytes = naclUtil.decodeUTF8(data);
+    const encrypted = nacl.box(dataBytes, nonce, publicKeyBytes, ephemeralKeyPair.secretKey);
+    
+    if (!encrypted) {
+      throw new Error('X25519 encryption failed');
+    }
+    
+    // Combine ephemeral public key + nonce + encrypted data
+    const combined = new Uint8Array(32 + 24 + encrypted.length);
+    combined.set(ephemeralKeyPair.publicKey, 0);
+    combined.set(nonce, 32);
+    combined.set(encrypted, 56);
+    
+    return 'X25519:' + naclUtil.encodeBase64(combined);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`X25519 encryption failed: ${errorMessage}`);
+  }
+};
+
+/**
+ * Decrypts data that was encrypted with X25519
+ */
+const decryptWithX25519 = (encryptedData: string, x25519PrivateKey: string): string => {
+  try {
+    // Check for X25519 marker
+    if (!encryptedData.startsWith('X25519:')) {
+      throw new Error('Data was not encrypted with X25519');
+    }
+    
+    const actualEncryptedData = encryptedData.substring(7); // Remove 'X25519:' prefix
+    
+    // Remove the x25519: prefix and decode the private key
+    const privateKeyB64 = x25519PrivateKey.replace('x25519:', '');
+    const privateKeyBytes = naclUtil.decodeBase64(privateKeyB64);
+    
+    if (privateKeyBytes.length !== 32) {
+      throw new Error('Invalid X25519 private key length. Expected 32 bytes.');
+    }
+    
+    // Decode the combined data
+    const combined = naclUtil.decodeBase64(actualEncryptedData);
+    
+    if (combined.length < 56) {
+      throw new Error('Invalid X25519 encrypted data format');
+    }
+    
+    // Extract components
+    const ephemeralPublicKey = combined.slice(0, 32);
+    const nonce = combined.slice(32, 56);
+    const encrypted = combined.slice(56);
+    
+    // Decrypt the data
+    const decrypted = nacl.box.open(encrypted, nonce, ephemeralPublicKey, privateKeyBytes);
+    
+    if (!decrypted) {
+      throw new Error('X25519 decryption failed - invalid key or corrupted data');
+    }
+    
+    return naclUtil.encodeUTF8(decrypted);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`X25519 decryption failed: ${errorMessage}`);
+  }
+};
+
+/**
  * Note: Ed25519 is a signature algorithm, not an encryption algorithm.
  * This function has been removed as it was cryptographically incorrect.
  * For proper elliptic curve encryption, use X25519 or stick with RSA.
  */
 
 /**
- * Encrypts data using a public key (supports RSA PEM and SSH RSA only)
+ * Encrypts data using a public key (supports RSA PEM, SSH RSA, and X25519)
  * Note: Ed25519 is not supported for encryption as it's a signature algorithm
  */
 export const encryptWithPublicKey = (data: string, publicKey: string): string => {
@@ -199,12 +294,16 @@ export const encryptWithPublicKey = (data: string, publicKey: string): string =>
         throw new Error(`SSH RSA encryption failed: ${error instanceof Error ? error.message : String(error)}`);
       }
       
+    case 'x25519':
+      // X25519 elliptic curve encryption
+      return encryptWithX25519(data, publicKey);
+      
     case 'ssh-ed25519':
       // Ed25519 is a signature algorithm, not suitable for encryption
       throw new Error('Ed25519 keys are not supported for encryption. Ed25519 is a digital signature algorithm. For encryption, use RSA keys or consider X25519 for elliptic curve encryption.');
       
     default:
-      throw new Error(`Unsupported public key format. Supported formats for encryption: RSA PEM (-----BEGIN PUBLIC KEY-----), SSH RSA (ssh-rsa)`);
+      throw new Error(`Unsupported public key format. Supported formats for encryption: RSA PEM (-----BEGIN PUBLIC KEY-----), SSH RSA (ssh-rsa), X25519 (x25519:base64key)`);
   }
 };
 
@@ -222,6 +321,9 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKey: string)
     } catch (error) {
       throw new Error(`RSA decryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+  } else if (encryptedData.startsWith('X25519:')) {
+    // X25519 decryption
+    return decryptWithX25519(encryptedData, privateKey);
   } else if (encryptedData.startsWith('ED25519:')) {
     // Ed25519 encrypted data should not exist as Ed25519 is not an encryption algorithm
     throw new Error('Ed25519 encrypted data detected, but Ed25519 is a signature algorithm, not an encryption algorithm. This data may have been created incorrectly.');
@@ -237,11 +339,22 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKey: string)
   }
 };
 
+/**
+ * Generates an X25519 key pair for encryption
+ */
+export const generateX25519KeyPair = (): { publicKey: string; privateKey: string } => {
+  const keyPair = nacl.box.keyPair();
+  
+  return {
+    publicKey: 'x25519:' + naclUtil.encodeBase64(keyPair.publicKey),
+    privateKey: 'x25519:' + naclUtil.encodeBase64(keyPair.secretKey)
+  };
+};
 
 /**
  * SSH Key Generation Types
  */
-export type SSHKeyType = 'RSA2048' | 'RSA4096' | 'Ed25519';
+export type SSHKeyType = 'RSA2048' | 'RSA4096' | 'Ed25519' | 'X25519';
 
 /**
  * SSH Key Pair Interface
@@ -371,6 +484,14 @@ export const generateSSHKeyPair = (keyType: SSHKeyType): SSHKeyPair => {
       publicKey = keypair.publicKey;
       privateKey = keypair.privateKey;
       // Ed25519 doesn't have a PEM public key equivalent for encryption
+      break;
+    }
+    
+    case 'X25519': {
+      const keypair = generateX25519KeyPair();
+      publicKey = keypair.publicKey;
+      privateKey = keypair.privateKey;
+      // X25519 keys are in our custom format
       break;
     }
     

@@ -9,8 +9,8 @@ const router = Router();
 // Validation rules
 const generateSSHKeysValidation = [
   param('keyType')
-    .isIn(['RSA2048', 'RSA4096', 'Ed25519'])
-    .withMessage('Key type must be one of: RSA2048, RSA4096, Ed25519')
+    .isIn(['RSA2048', 'RSA4096', 'Ed25519', 'X25519'])
+    .withMessage('Key type must be one of: RSA2048, RSA4096, Ed25519, X25519')
 ];
 
 // Generate SSH key pair endpoint

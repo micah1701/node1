@@ -12,7 +12,7 @@ export const generateSSHKeys = async (req: Request, res: Response, next: NextFun
     const { keyType } = req.params;
     
     // Validate key type
-    const validKeyTypes: SSHKeyType[] = ['RSA2048', 'RSA4096', 'Ed25519'];
+    const validKeyTypes: SSHKeyType[] = ['RSA2048', 'RSA4096', 'Ed25519', 'X25519'];
     if (!validKeyTypes.includes(keyType as SSHKeyType)) {
       throw new ApiError(
         HttpStatus.BAD_REQUEST, 
