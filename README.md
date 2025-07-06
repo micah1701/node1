@@ -137,9 +137,10 @@ This framework is designed with a modular architecture that separates core funct
 The framework includes a built-in SSH key generation service that supports multiple key types:
 
 ### Supported Key Types
-- **RSA2048** - 2048-bit RSA keys (good balance of security and performance)
-- **RSA4096** - 4096-bit RSA keys (higher security, slower performance)
-- **Ed25519** - Modern elliptic curve keys (recommended for new deployments)
+- **RSA2048** - 2048-bit RSA keys (good balance of security and performance) - For signatures and encryption
+- **RSA4096** - 4096-bit RSA keys (higher security, slower performance) - For signatures and encryption
+- **Ed25519** - Modern elliptic curve keys for signatures (recommended for SSH authentication)
+- **X25519** - Modern elliptic curve keys for encryption (fast and secure)
 
 ### Usage Example
 
@@ -250,15 +251,17 @@ The framework supports three different encryption methods for private key storag
 
 ### 3. Public Key Encryption
 - **Description**: Uses public key encryption (RSA or Ed25519) with the application's active public key
-   - **Supported Keys**: RSA only (Ed25519 is a signature algorithm, not suitable for encryption)
+   - **Supported Keys**: RSA and X25519 (Ed25519 is a signature algorithm, not suitable for encryption)
 - **Use Case**: End-to-end encryption where server never has access to decrypted data
    - **Security**: Highest security - server cannot decrypt data
-   - **Setup**: Requires providing an RSA public key (RSA PEM or SSH RSA) during application creation or adding one later
-   - **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa)
+   - **Setup**: Requires providing a public key (RSA PEM, SSH RSA, or X25519) during application creation or adding one later
+   - **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa), X25519 (x25519:base64key)
 
 **Security Note:** For RSA public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
 
-**Important:** Ed25519 keys are not supported for encryption because Ed25519 is a digital signature algorithm, not an encryption algorithm. For elliptic curve encryption, consider X25519, but RSA remains the recommended option for this application.
+**X25519 Support:** X25519 provides modern elliptic curve encryption with excellent performance and security. X25519 keys are smaller and faster than RSA while providing equivalent security.
+
+**Important:** Ed25519 keys are not supported for encryption because Ed25519 is a digital signature algorithm, not an encryption algorithm.
 
 ## Extending the Framework
 
