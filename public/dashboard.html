@@ -233,6 +233,67 @@
             font-weight: 500;
         }
 
+        .inactive-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #4f46e5;
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+
+        .toggle-label {
+            color: white;
+            font-weight: 500;
+        }
+
         .app-actions {
             display: flex;
             gap: 0.5rem;
@@ -524,6 +585,15 @@
                         </button>
                     </div>
                     
+                    <!-- Inactive Applications Toggle (will be shown/hidden by JavaScript) -->
+                    <div id="inactiveToggle" class="inactive-toggle" style="display: none;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="showInactiveApps" onchange="toggleInactiveApps()" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Show inactive applications</span>
+                    </div>
+
                     <div id="appsContainer">
                         <!-- Apps will be loaded here -->
                     </div>
@@ -681,6 +751,8 @@
 
     <script>
         let currentEditingApp = null;
+        let userApps = [];
+        let showInactive = true; // Default to showing inactive apps
 
         // Authentication check
         function checkAuth() {
@@ -746,7 +818,8 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    displayApps(data.data);
+                    userApps = data.data;
+                    displayApps(userApps);
                 } else {
                     throw new Error('Failed to load applications');
                 }
@@ -756,9 +829,44 @@
             }
         }
 
+        // Toggle inactive applications visibility
+        function toggleInactiveApps() {
+            const checkbox = document.getElementById('showInactiveApps');
+            showInactive = checkbox.checked;
+            displayApps(userApps);
+        }
+
+        // Check if inactive toggle should be shown
+        function updateInactiveToggleVisibility(apps) {
+            const toggle = document.getElementById('inactiveToggle');
+            const hasMultipleApps = apps.length > 1;
+            const hasInactiveApps = apps.some(app => {
+                const appData = app.keychain_apps || app;
+                return !appData.active;
+            });
+            
+            if (hasMultipleApps && hasInactiveApps) {
+                toggle.style.display = 'flex';
+            } else {
+                toggle.style.display = 'none';
+                // If hiding toggle, ensure we show all apps
+                showInactive = true;
+                document.getElementById('showInactiveApps').checked = true;
+            }
+        }
+
         // Display apps in the grid
         function displayApps(apps) {
             const container = document.getElementById('appsContainer');
+            
+            // Update toggle visibility
+            updateInactiveToggleVisibility(apps);
+            
+            // Filter apps based on showInactive setting
+            const filteredApps = showInactive ? apps : apps.filter(app => {
+                const appData = app.keychain_apps || app;
+                return appData.active;
+            });
             
             if (apps.length === 0) {
                 container.innerHTML = `
@@ -773,7 +881,7 @@
 
             container.innerHTML = `
                 <div class="apps-grid">
-                    ${apps.map(app => {
+                    ${filteredApps.map(app => {
                         // Handle both MySQL and Supabase response formats
                         const appData = app.keychain_apps || app;
                         const role = app.role || 'owner';
@@ -821,6 +929,21 @@
                     }).join('')}
                 </div>
             `;
+            
+            // Show message if apps are hidden due to filter
+            if (!showInactive && apps.length > filteredApps.length) {
+                const hiddenCount = apps.length - filteredApps.length;
+                const appsGrid = container.querySelector('.apps-grid');
+                appsGrid.innerHTML += `
+                    <div class="app-card" style="border: 2px dashed #666; text-align: center; color: #888;">
+                        <p style="margin: 0; font-style: italic;">
+                            ${hiddenCount} inactive application${hiddenCount > 1 ? 's' : ''} hidden. 
+                            <a href="#" onclick="document.getElementById('showInactiveApps').checked = true; toggleInactiveApps(); return false;" 
+                               style="color: #4f46e5; text-decoration: none;">Show all applications</a>
+                        </p>
+                    </div>
+                `;
+            }
         }
 
         // Load dashboard data
