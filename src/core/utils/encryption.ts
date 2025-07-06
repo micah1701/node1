@@ -165,87 +165,14 @@ const convertSSHRSAToPEM = (sshKey: string): string => {
 };
 
 /**
- * Encrypts data using AES with a key derived from Ed25519 public key
- * Since Ed25519 is not suitable for direct encryption, we use it to derive an AES key
+ * Note: Ed25519 is a signature algorithm, not an encryption algorithm.
+ * This function has been removed as it was cryptographically incorrect.
+ * For proper elliptic curve encryption, use X25519 or stick with RSA.
  */
-const encryptWithEd25519Derived = (data: string, ed25519PublicKey: string): string => {
-  try {
-    const parts = ed25519PublicKey.trim().split(' ');
-    if (parts.length < 2) {
-      throw new Error('Invalid SSH Ed25519 key format');
-    }
-    
-    // Use the Ed25519 public key as a seed for key derivation
-    const keyData = parts[1]; // Base64 part of the key
-    
-    // Create a deterministic salt from the key
-    const salt = forge.md.sha256.create().update(keyData).digest().getBytes().substring(0, 16);
-    
-    // Derive AES key from the Ed25519 public key
-    const aesKey = deriveKey(keyData, salt);
-    
-    // Generate random IV for this encryption
-    const iv = generateIV();
-    
-    // Encrypt with AES
-    const cipher = forge.cipher.createCipher('AES-CBC', aesKey);
-    cipher.start({ iv });
-    cipher.update(forge.util.createBuffer(data, 'utf8'));
-    cipher.finish();
-    
-    const encrypted = cipher.output.getBytes();
-    const combined = iv + encrypted;
-    
-    // Prepend a marker to indicate this is Ed25519-derived encryption
-    return 'ED25519:' + forge.util.encode64(combined);
-  } catch (error) {
-    throw new Error(`Failed to encrypt with Ed25519-derived key: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
 
 /**
- * Decrypts data that was encrypted with Ed25519-derived AES key
- */
-const decryptWithEd25519Derived = (encryptedData: string, ed25519PublicKey: string): string => {
-  try {
-    // Check for Ed25519 marker
-    if (!encryptedData.startsWith('ED25519:')) {
-      throw new Error('Data was not encrypted with Ed25519-derived key');
-    }
-    
-    const actualEncryptedData = encryptedData.substring(8); // Remove 'ED25519:' prefix
-    
-    const parts = ed25519PublicKey.trim().split(' ');
-    if (parts.length < 2) {
-      throw new Error('Invalid SSH Ed25519 key format');
-    }
-    
-    const keyData = parts[1]; // Base64 part of the key
-    
-    // Recreate the same salt used during encryption
-    const salt = forge.md.sha256.create().update(keyData).digest().getBytes().substring(0, 16);
-    
-    // Derive the same AES key
-    const aesKey = deriveKey(keyData, salt);
-    
-    // Decrypt
-    const combined = forge.util.decode64(actualEncryptedData);
-    const iv = combined.substring(0, 16);
-    const encrypted = combined.substring(16);
-    
-    const decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
-    decipher.start({ iv });
-    decipher.update(forge.util.createBuffer(encrypted));
-    decipher.finish();
-    
-    return decipher.output.toString();
-  } catch (error) {
-    throw new Error(`Failed to decrypt with Ed25519-derived key: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Encrypts data using a public key (supports RSA PEM, SSH RSA, and SSH Ed25519)
+ * Encrypts data using a public key (supports RSA PEM and SSH RSA only)
+ * Note: Ed25519 is not supported for encryption as it's a signature algorithm
  */
 export const encryptWithPublicKey = (data: string, publicKey: string): string => {
   const keyType = detectKeyType(publicKey);
@@ -273,11 +200,11 @@ export const encryptWithPublicKey = (data: string, publicKey: string): string =>
       }
       
     case 'ssh-ed25519':
-      // Use Ed25519-derived AES encryption
-      return encryptWithEd25519Derived(data, publicKey);
+      // Ed25519 is a signature algorithm, not suitable for encryption
+      throw new Error('Ed25519 keys are not supported for encryption. Ed25519 is a digital signature algorithm. For encryption, use RSA keys or consider X25519 for elliptic curve encryption.');
       
     default:
-      throw new Error(`Unsupported public key format. Supported formats: RSA PEM (-----BEGIN PUBLIC KEY-----), SSH RSA (ssh-rsa), SSH Ed25519 (ssh-ed25519)`);
+      throw new Error(`Unsupported public key format. Supported formats for encryption: RSA PEM (-----BEGIN PUBLIC KEY-----), SSH RSA (ssh-rsa)`);
   }
 };
 
@@ -296,9 +223,8 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKey: string)
       throw new Error(`RSA decryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   } else if (encryptedData.startsWith('ED25519:')) {
-    // For Ed25519, we need the corresponding public key to decrypt
-    // This is a limitation - we'd need to store the public key reference
-    throw new Error('Ed25519 decryption requires the corresponding public key. Use decryptWithEd25519Derived() with the public key.');
+    // Ed25519 encrypted data should not exist as Ed25519 is not an encryption algorithm
+    throw new Error('Ed25519 encrypted data detected, but Ed25519 is a signature algorithm, not an encryption algorithm. This data may have been created incorrectly.');
   } else {
     // Legacy format - assume RSA
     try {
@@ -311,12 +237,6 @@ export const decryptWithPrivateKey = (encryptedData: string, privateKey: string)
   }
 };
 
-/**
- * Decrypts Ed25519-derived encrypted data using the public key
- */
-export const decryptWithEd25519PublicKey = (encryptedData: string, ed25519PublicKey: string): string => {
-  return decryptWithEd25519Derived(encryptedData, ed25519PublicKey);
-};
 
 /**
  * SSH Key Generation Types
