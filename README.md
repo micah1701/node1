@@ -255,6 +255,8 @@ The framework supports three different encryption methods for private key storag
 - **Setup**: Requires providing a public key (RSA PEM, SSH RSA, or SSH Ed25519) during application creation or adding one later
 - **Formats Supported**: RSA PEM, SSH RSA (ssh-rsa), SSH Ed25519 (ssh-ed25519)
 
+**Security Note:** For both RSA and Ed25519 public key encryption, the server returns encrypted data that must be decrypted client-side using the corresponding private key. This ensures true end-to-end encryption where the server never has access to the decrypted data.
+
 ## Extending the Framework
 
 ### Adding Application-Specific Features
