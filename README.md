@@ -236,27 +236,9 @@ The `api_request_logs` table stores:
 - `error_message` - Error message (if any)
 - `created_at` - Timestamp
 
-## Web Interface
-
-### Landing Page (`/`)
-
-- **Modern Design**: Gradient background with glassmorphism effects
-- **Feature Overview**: Highlights key capabilities of the system
-- **Login Modal**: Secure authentication with JWT tokens
-- **Responsive**: Mobile-friendly design
-
-### Dashboard (`/dashboard`)
-
-- **Application Management**: Create, edit, and manage keychain applications
-- **User Access Control**: Role-based permissions (owner, admin, viewer)
-- **Multiple Encryption Options**: Support for default, passphrase, and public key encryption
-- **Dynamic Form Fields**: Public key input appears when selecting public key encryption
-- **Real-time Updates**: Dynamic loading and updates without page refresh
-- **Security Features**: Token-based authentication with auto-refresh
-
 ## 🔐 Encryption Methods
 
-The framework supports three different encryption methods for private key storage:
+The framework supports three different encryption methods:
 
 ### 1. Default Encryption
 
@@ -301,7 +283,7 @@ The framework supports three different encryption methods for private key storag
    export const getProducts = async (
      req: Request,
      res: Response,
-     next: NextFunction
+     next: NextFunction,
    ) => {
      // Your application logic here
      // Access authenticated user via req.user
@@ -350,7 +332,7 @@ const result = await db.execute(`SELECT * FROM ${tableName}`);
 export const myController = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const userId = req.user?.id; // Available after authenticate middleware
   // Your logic here
@@ -426,10 +408,6 @@ The framework creates the following tables:
 
 - `users` - User authentication and profiles
 - `key_values` - Encrypted key-value storage
-- `keychain_apps` - Keychain applications with encryption settings
-- `keychain_app_public_keys` - Public key storage with versioning
-- `keychain_app_private_keys` - Encrypted private key storage
-- `user_keychain_apps` - User-application access control
 - `api_request_logs` - Encrypted API request and response logs
 
 ## Security Features
@@ -442,26 +420,8 @@ The framework creates the following tables:
 - **CORS** - Configurable cross-origin resource sharing
 - **User Access Control** - Role-based permissions for applications
 - **Audit Logging** - Comprehensive logging of all operations
-- **Key Rotation Support** - Public key versioning with status tracking
 - **Sensitive Data Redaction** - Automatic redaction in logs
 - **Encrypted Log Storage** - All logs encrypted with master key
-
-## User Access Control
-
-The framework implements a robust user access control system:
-
-### Roles
-
-- **Owner** - Full control over the application
-- **Admin** - Can modify application settings and manage keys
-- **Viewer** - Read-only access to application data
-
-### Access Patterns
-
-- Users can only access applications they have been granted access to
-- All keychain operations require user authentication
-- Role-based permissions control what actions users can perform
-- Applications are isolated between users and user groups
 
 ## Development Scripts
 
@@ -493,7 +453,7 @@ See `.env.example` for all available configuration options including:
 
 ## Contributing
 
-This framework is designed as a template and is mean to be extended.
+This framework is designed as a template and is meant to be extended.
 
 Where possible, create your application-specific features within `src/app/`.
 
