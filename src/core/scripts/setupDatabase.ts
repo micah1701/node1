@@ -6,6 +6,8 @@ import { config } from '../config';
 
 dotenv.config();
 
+const supabaseSchema = process.env.SUPABASE_SCHEMA;
+
 // MySQL table creation queries
 const createUsersTableMySQL = (tableName: string) => `
 CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -59,8 +61,10 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
 `;
 
 // PostgreSQL table creation queries
-const createUsersTablePostgreSQL = (tableName: string) => `
-CREATE TABLE IF NOT EXISTS ${tableName} (
+const createUsersTablePostgreSQL = (tableName: string) => {
+  const t = supabaseSchema ? `${supabaseSchema}.${tableName}` : tableName;
+  return `
+CREATE TABLE IF NOT EXISTS ${t} (
   id SERIAL PRIMARY KEY,
   api_user VARCHAR(255) NOT NULL UNIQUE,
   api_secret VARCHAR(255) NOT NULL,
@@ -71,6 +75,8 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
   modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;
+
 -- Create trigger for modified_at update
 CREATE OR REPLACE FUNCTION update_modified_at_column()
 RETURNS TRIGGER AS $$
@@ -80,15 +86,18 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-DROP TRIGGER IF EXISTS update_${tableName}_modified_at ON ${tableName};
+DROP TRIGGER IF EXISTS update_${tableName}_modified_at ON ${t};
 CREATE TRIGGER update_${tableName}_modified_at
-    BEFORE UPDATE ON ${tableName}
+    BEFORE UPDATE ON ${t}
     FOR EACH ROW
     EXECUTE FUNCTION update_modified_at_column();
 `;
+};
 
-const createKeyValuesTablePostgreSQL = (tableName: string) => `
-CREATE TABLE IF NOT EXISTS ${tableName} (
+const createKeyValuesTablePostgreSQL = (tableName: string) => {
+  const t = supabaseSchema ? `${supabaseSchema}.${tableName}` : tableName;
+  return `
+CREATE TABLE IF NOT EXISTS ${t} (
   id SERIAL PRIMARY KEY,
   uuid VARCHAR(36) NOT NULL UNIQUE,
   key_name VARCHAR(255) NOT NULL,
@@ -98,17 +107,22 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
   modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_${tableName}_uuid ON ${tableName} (uuid);
+ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;
 
-DROP TRIGGER IF EXISTS update_${tableName}_modified_at ON ${tableName};
+CREATE INDEX IF NOT EXISTS idx_${tableName}_uuid ON ${t} (uuid);
+
+DROP TRIGGER IF EXISTS update_${tableName}_modified_at ON ${t};
 CREATE TRIGGER update_${tableName}_modified_at
-    BEFORE UPDATE ON ${tableName}
+    BEFORE UPDATE ON ${t}
     FOR EACH ROW
     EXECUTE FUNCTION update_modified_at_column();
 `;
+};
 
-const createApiRequestLogsTablePostgreSQL = (tableName: string) => `
-CREATE TABLE IF NOT EXISTS ${tableName} (
+const createApiRequestLogsTablePostgreSQL = (tableName: string) => {
+  const t = supabaseSchema ? `${supabaseSchema}.${tableName}` : tableName;
+  return `
+CREATE TABLE IF NOT EXISTS ${t} (
   id SERIAL PRIMARY KEY,
   request_uuid VARCHAR(36) NOT NULL UNIQUE,
   user_id INTEGER NULL,
@@ -125,13 +139,16 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_${tableName}_request_uuid ON ${tableName} (request_uuid);
-CREATE INDEX IF NOT EXISTS idx_${tableName}_user_id ON ${tableName} (user_id);
-CREATE INDEX IF NOT EXISTS idx_${tableName}_method ON ${tableName} (method);
-CREATE INDEX IF NOT EXISTS idx_${tableName}_status_code ON ${tableName} (status_code);
-CREATE INDEX IF NOT EXISTS idx_${tableName}_created_at ON ${tableName} (created_at);
-CREATE INDEX IF NOT EXISTS idx_${tableName}_ip_address ON ${tableName} (ip_address);
+ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_${tableName}_request_uuid ON ${t} (request_uuid);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_user_id ON ${t} (user_id);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_method ON ${t} (method);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_status_code ON ${t} (status_code);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_created_at ON ${t} (created_at);
+CREATE INDEX IF NOT EXISTS idx_${tableName}_ip_address ON ${t} (ip_address);
 `;
+};
 
 async function setupMySQLDatabase() {
   try {
@@ -179,7 +196,8 @@ async function setupMySQLDatabase() {
 
 function generateSupabaseSQL() {
   const tablePrefix = config.database.tablePrefix;
-  
+  const schemaPrefix = supabaseSchema ? `${supabaseSchema}.` : '';
+
   const allQueries = [
     createUsersTablePostgreSQL(`${tablePrefix}users`),
     createKeyValuesTablePostgreSQL(`${tablePrefix}key_values`),
@@ -187,9 +205,9 @@ function generateSupabaseSQL() {
   ];
 
   const constraintQueries = [
-    `ALTER TABLE ${tablePrefix}api_request_logs
+    `ALTER TABLE ${schemaPrefix}${tablePrefix}api_request_logs
      ADD CONSTRAINT fk_api_request_logs_user_id
-     FOREIGN KEY (user_id) REFERENCES ${tablePrefix}users(id)
+     FOREIGN KEY (user_id) REFERENCES ${schemaPrefix}${tablePrefix}users(id)
      ON DELETE SET NULL;`
   ];
 
