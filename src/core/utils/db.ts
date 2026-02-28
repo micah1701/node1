@@ -45,7 +45,7 @@ class MySQLDatabase implements DatabaseInterface {
 }
 
 class SupabaseDatabase implements DatabaseInterface {
-  private client: SupabaseClient;
+  private client;
 
   constructor() {
     if (!config.database.supabase.url || !config.database.supabase.publishableKey) {
@@ -54,7 +54,10 @@ class SupabaseDatabase implements DatabaseInterface {
 
     this.client = createClient(
       config.database.supabase.url,
-      config.database.supabase.publishableKey
+      config.database.supabase.publishableKey,
+      { 
+      db: { schema: config.database.supabase.schema, }
+      }
     );
   }
 

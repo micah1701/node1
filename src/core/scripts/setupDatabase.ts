@@ -198,7 +198,7 @@ function generateSupabaseSQL() {
 
 async function setupSupabaseDatabase() {
   try {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_PUBLISHABLE_KEY) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
       throw new Error('Supabase configuration missing');
     }
 
@@ -235,9 +235,9 @@ async function setupSupabaseDatabase() {
     // Test connection to verify Supabase is accessible
     const supabase = createClient(
       process.env.SUPABASE_URL,
-      process.env.SUPABASE_PUBLISHABLE_KEY,
+      process.env.SUPABASE_SECRET_KEY,
       { 
-      db: { schema: 'adhoc_analytics' }
+        db: { schema: process.env.SUPABASE_SCHEMA }
       }
     );
 

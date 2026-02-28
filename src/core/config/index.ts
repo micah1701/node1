@@ -35,7 +35,9 @@ export const config = {
     // Supabase configuration
     supabase: {
       url: process.env.SUPABASE_URL || '',
-      publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ''
+      publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || '',
+      schema: process.env.SUPABASE_SCHEMA || 'public',
+      secretKey: process.env.SUPABASE_SECRET_KEY || ''
     }
   },
   
