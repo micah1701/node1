@@ -198,6 +198,16 @@ function generateSupabaseSQL() {
   const tablePrefix = config.database.tablePrefix;
   const schemaPrefix = supabaseSchema ? `${supabaseSchema}.` : '';
 
+  const schemaQueries = supabaseSchema ? [
+    `-- Create schema and grant access to Supabase roles
+CREATE SCHEMA IF NOT EXISTS ${supabaseSchema};
+
+GRANT USAGE ON SCHEMA ${supabaseSchema} TO postgres, anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA ${supabaseSchema} GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA ${supabaseSchema} GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;`
+  ] : [];
+
   const allQueries = [
     createUsersTablePostgreSQL(`${tablePrefix}users`),
     createKeyValuesTablePostgreSQL(`${tablePrefix}key_values`),
@@ -211,7 +221,7 @@ function generateSupabaseSQL() {
      ON DELETE SET NULL;`
   ];
 
-  return [...allQueries, ...constraintQueries].join('\n\n');
+  return [...schemaQueries, ...allQueries, ...constraintQueries].join('\n\n');
 }
 
 async function setupSupabaseDatabase() {
@@ -246,6 +256,13 @@ async function setupSupabaseDatabase() {
     logger.info('');
     logger.info('4. Execute the SQL commands in the Supabase SQL Editor');
     logger.info('5. Verify that all tables have been created successfully');
+    if (process.env.SUPABASE_SCHEMA && process.env.SUPABASE_SCHEMA !== 'public') {
+      logger.info('');
+      logger.info('IMPORTANT - Custom schema requires one additional step:');
+      logger.info(`6. In the Supabase dashboard go to: Settings > API > Exposed schemas`);
+      logger.info(`   Add "${process.env.SUPABASE_SCHEMA}" to the list and click Save.`);
+      logger.info('   This allows PostgREST (the Supabase API layer) to access your schema.');
+    }
     logger.info('');
     logger.info('After completing these steps, your Supabase database will be ready to use.');
     logger.info('='.repeat(80));

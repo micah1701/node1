@@ -215,13 +215,13 @@ class SupabaseDatabase implements DatabaseInterface {
   }
 
   async testConnection(): Promise<boolean> {
+
     try {
       // Try a simple query to test the connection using a user-defined table
       const { error } = await this.client
         .from(this.getTableName('users'))
         .select('id')
         .limit(1);
-      
       // If we get here without an error, connection is working
       return !error || error.code === 'PGRST106'; // PGRST106 = table not found (still a valid connection)
     } catch (error) {
