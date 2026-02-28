@@ -48,13 +48,13 @@ class SupabaseDatabase implements DatabaseInterface {
   private client: SupabaseClient;
 
   constructor() {
-    if (!config.database.supabase.url || !config.database.supabase.anonKey) {
-      throw new Error('Supabase configuration is missing. Please check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file');
+    if (!config.database.supabase.url || !config.database.supabase.publishableKey) {
+      throw new Error('Supabase configuration is missing. Please check SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in your .env file');
     }
-    
+
     this.client = createClient(
       config.database.supabase.url,
-      config.database.supabase.anonKey
+      config.database.supabase.publishableKey
     );
   }
 

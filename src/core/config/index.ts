@@ -34,8 +34,8 @@ export const config = {
     
     // Supabase configuration
     supabase: {
-      url: process.env.VITE_SUPABASE_URL || '',
-      anonKey: process.env.VITE_SUPABASE_ANON_KEY || ''
+      url: process.env.SUPABASE_URL || '',
+      publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ''
     }
   },
   
