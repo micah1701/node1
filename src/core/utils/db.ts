@@ -214,6 +214,19 @@ class SupabaseDatabase implements DatabaseInterface {
     return data;
   }
 
+async findRecentApiLogsByUserId(userId: number) {
+    const tableName = this.getTableName('api_request_logs');
+    const { data, error } = await this.client
+      .from(tableName)
+      .select('request_uuid, created_at, method, url, status_code')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async testConnection(): Promise<boolean> {
 
     try {
